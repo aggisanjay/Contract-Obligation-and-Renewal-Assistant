@@ -296,23 +296,23 @@ export const ReviewPage: React.FC = () => {
   ).length;
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-slate-100">
+    <div className="flex-1 flex flex-col min-h-0 bg-slate-100/70">
       {/* Top Contract Action Bar */}
-      <div className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between shadow-2xs">
+      <div className="backdrop-blur-md bg-white/90 border-b border-slate-200/90 px-6 py-3.5 flex flex-wrap items-center justify-between gap-3 shadow-xs shrink-0">
         <div>
           <div className="flex items-center space-x-3">
-            <h1 className="text-lg font-bold text-slate-900">{contract.title}</h1>
+            <h1 className="text-lg font-extrabold text-slate-900 tracking-tight">{contract.title}</h1>
 
             {/* Version Switcher Dropdown */}
-            <div className="flex items-center space-x-1.5">
-              <label htmlFor="versionSelect" className="text-xs text-slate-400 font-medium">
+            <div className="flex items-center space-x-1.5 bg-slate-100/80 px-2.5 py-1 rounded-xl border border-slate-200/80">
+              <label htmlFor="versionSelect" className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
                 Version:
               </label>
               <select
                 id="versionSelect"
                 value={activeVersion.versionNumber}
                 onChange={(e) => loadData(parseInt(e.target.value, 10))}
-                className="px-2.5 py-1 text-xs font-bold bg-slate-100 text-slate-800 border border-slate-300 rounded-md hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500 cursor-pointer"
+                className="text-xs font-extrabold bg-transparent text-slate-800 focus:outline-none cursor-pointer"
               >
                 {data.allVersions.map((v) => (
                   <option key={v.id} value={v.versionNumber}>
@@ -323,27 +323,27 @@ export const ReviewPage: React.FC = () => {
             </div>
 
             {activeVersion.versionNumber < contract.totalVersions && (
-              <span className="px-2 py-0.5 text-[11px] font-semibold bg-amber-100 text-amber-800 border border-amber-300 rounded">
+              <span className="px-2.5 py-0.5 text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300/80 rounded-lg shadow-2xs">
                 Viewing Historical v{activeVersion.versionNumber}
               </span>
             )}
 
             {activeVersion.pageCount && (
-              <span className="text-xs text-slate-400">({activeVersion.pageCount} pages)</span>
+              <span className="text-xs font-medium text-slate-400">({activeVersion.pageCount} pages)</span>
             )}
           </div>
 
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-slate-500 font-medium mt-0.5">
             {pendingCount} items pending review &bull; {items.length} total in v{activeVersion.versionNumber}
             {contract.totalVersions > 1 && ` &bull; ${contract.totalVersions} total versions`}
           </p>
         </div>
 
-        <div className="flex items-center space-x-2.5">
+        <div className="flex items-center flex-wrap gap-2">
           {/* Upload New Version Button */}
           <button
             onClick={() => setShowUploadVersionModal(true)}
-            className="inline-flex items-center px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs"
+            className="inline-flex items-center px-3.5 py-2 border border-slate-200 bg-white hover:bg-slate-50 rounded-xl text-xs font-bold text-slate-700 shadow-2xs hover:shadow-xs active:scale-95 transition-all"
             title="Upload an updated version of this contract (v2, v3, etc.)"
           >
             <Upload className="w-3.5 h-3.5 mr-1.5 text-slate-500" />
@@ -354,7 +354,7 @@ export const ReviewPage: React.FC = () => {
           {contract.totalVersions >= 2 && (
             <button
               onClick={() => setShowDiffModal(true)}
-              className="inline-flex items-center px-3 py-1.5 border border-indigo-200 bg-indigo-50/70 text-indigo-700 rounded-lg text-xs font-semibold hover:bg-indigo-100 transition-colors shadow-2xs"
+              className="inline-flex items-center px-3.5 py-2 border border-indigo-200 bg-indigo-50/80 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-bold shadow-2xs active:scale-95 transition-all"
               title="Compare section-by-section diffs between versions"
             >
               <Split className="w-3.5 h-3.5 mr-1.5 text-indigo-600" />
@@ -364,7 +364,7 @@ export const ReviewPage: React.FC = () => {
 
           <button
             onClick={viewAuditLog}
-            className="inline-flex items-center px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs"
+            className="inline-flex items-center px-3.5 py-2 border border-slate-200 bg-white hover:bg-slate-50 rounded-xl text-xs font-bold text-slate-700 shadow-2xs active:scale-95 transition-all"
           >
             <History className="w-3.5 h-3.5 mr-1.5 text-slate-500" />
             Audit Log ({activeVersion.auditLogs.length})
@@ -372,16 +372,16 @@ export const ReviewPage: React.FC = () => {
 
           <Link
             to={`/contracts/${contract.id}/summary`}
-            className="inline-flex items-center px-3 py-1.5 border border-sky-600 text-sky-600 rounded-lg text-xs font-semibold hover:bg-sky-50 transition-colors"
+            className="inline-flex items-center px-3.5 py-2 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow-xs hover:shadow-glow-sky active:scale-95 transition-all"
           >
-            <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+            <Sparkles className="w-3.5 h-3.5 mr-1.5 text-sky-200" />
             Reviewed Summary
           </Link>
 
           {eligibleBulkCount > 0 && (
             <button
               onClick={handleBulkApprove}
-              className="inline-flex items-center px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
+              className="inline-flex items-center px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold shadow-xs hover:shadow-glow-emerald active:scale-95 transition-all"
               title="Bulk approve all confirmed items with verified citations"
             >
               <CheckCheck className="w-3.5 h-3.5 mr-1.5" />
@@ -394,7 +394,7 @@ export const ReviewPage: React.FC = () => {
               setDeleteError(null);
               setShowDeleteModal(true);
             }}
-            className="inline-flex items-center px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold text-rose-600 hover:bg-rose-50 hover:border-rose-300 transition-colors shadow-2xs"
+            className="inline-flex items-center px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 hover:border-rose-200 shadow-2xs active:scale-95 transition-all"
             title="Delete this contract"
           >
             <Trash2 className="w-3.5 h-3.5 mr-1.5 text-rose-500" />
@@ -405,21 +405,23 @@ export const ReviewPage: React.FC = () => {
 
       {/* Stale Items Banner (High Priority Alert) */}
       {staleItems.length > 0 && (
-        <div className="bg-amber-500 text-white px-6 py-2.5 flex items-center justify-between text-xs shadow-xs shrink-0 animate-in fade-in duration-200">
-          <div className="flex items-center space-x-2">
-            <AlertTriangle className="w-4 h-4 text-amber-100 shrink-0" />
-            <span className="font-semibold">
+        <div className="bg-gradient-to-r from-amber-500 via-amber-600 to-amber-500 text-white px-6 py-3 flex items-center justify-between text-xs shadow-xs shrink-0 animate-in fade-in duration-200 border-b border-amber-600">
+          <div className="flex items-center space-x-2.5">
+            <div className="w-6 h-6 rounded-lg bg-amber-400/40 flex items-center justify-center shrink-0">
+              <AlertTriangle className="w-4 h-4 text-white" />
+            </div>
+            <span className="font-bold text-xs sm:text-sm">
               Stale Clause Alert: {staleItems.length} item{staleItems.length > 1 ? "s" : ""} from prior version{" "}
               {staleItems.length > 1 ? "have" : "has"} modified or missing underlying clauses in v
               {activeVersion.versionNumber}.
             </span>
-            <span className="text-amber-100 text-[11px] hidden md:inline">
-              Re-confirm or dismiss these items before compiling the contract summary.
+            <span className="text-amber-100 text-xs hidden md:inline font-medium">
+              &bull; Re-confirm or dismiss these items before compiling the contract summary.
             </span>
           </div>
           <button
             onClick={() => setCategoryFilter("stale")}
-            className="px-3 py-1 bg-white text-amber-900 font-bold rounded-md hover:bg-amber-50 transition-colors shadow-2xs text-[11px]"
+            className="px-3.5 py-1.5 bg-white text-amber-900 font-extrabold rounded-xl hover:bg-amber-50 active:scale-95 transition-all shadow-2xs text-xs shrink-0 ml-3"
           >
             Review Stale Items ({staleItems.length})
           </button>
@@ -429,12 +431,17 @@ export const ReviewPage: React.FC = () => {
       {/* Main Split Screen */}
       <div className="flex-1 grid grid-cols-12 min-h-0 overflow-hidden">
         {/* Left Pane: Contract Sections */}
-        <div className="col-span-6 border-r border-slate-200 bg-white overflow-y-auto p-6 space-y-6">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-2">
-            <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-              Document Text & Sections (v{activeVersion.versionNumber})
-            </h2>
-            <span className="text-xs text-slate-500">{activeVersion.sections.length} parsed clauses</span>
+        <div className="col-span-6 border-r border-slate-200/80 bg-slate-50/30 overflow-y-auto p-6 space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-200/80 mb-2">
+            <div className="flex items-center space-x-2">
+              <span className="w-2 h-2 rounded-full bg-brand-500 animate-pulse" />
+              <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider font-heading">
+                Document Text & Sections (v{activeVersion.versionNumber})
+              </h2>
+            </div>
+            <span className="text-xs font-medium text-slate-600 bg-white px-2.5 py-0.5 rounded-full border border-slate-200/80 shadow-2xs">
+              {activeVersion.sections.length} parsed clauses
+            </span>
           </div>
 
           {activeVersion.sections.map((section) => {
@@ -445,23 +452,23 @@ export const ReviewPage: React.FC = () => {
                 ref={(el) => {
                   sectionRefs.current[section.label] = el;
                 }}
-                className={`p-4 rounded-xl border transition-all ${
+                className={`p-5 rounded-2xl border transition-all ${
                   isHighlighted
-                    ? "bg-amber-50 border-amber-400 ring-2 ring-amber-300"
-                    : "bg-slate-50 border-slate-200 hover:border-slate-300"
+                    ? "bg-amber-50/80 border-amber-400 ring-4 ring-amber-400/20 shadow-glow-amber scale-[1.005]"
+                    : "bg-white border-slate-200/80 hover:border-slate-300 hover:shadow-2xs"
                 }`}
               >
-                <div className="flex items-center justify-between text-xs text-slate-500 mb-1.5">
-                  <span className="font-bold text-slate-800">
-                    {section.label} {section.heading ? `- ${section.heading}` : ""}
+                <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
+                  <span className="font-bold text-slate-900 font-heading">
+                    {section.label} {section.heading ? `— ${section.heading}` : ""}
                   </span>
                   {section.page && (
-                    <span className="bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded text-[10px]">
+                    <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md font-mono text-[11px] font-semibold border border-slate-200/70">
                       Page {section.page}
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed font-mono">
+                <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed font-mono bg-slate-50/50 p-3 rounded-xl border border-slate-100">
                   {section.text}
                 </p>
               </div>
@@ -470,9 +477,9 @@ export const ReviewPage: React.FC = () => {
         </div>
 
         {/* Right Pane: Extracted Items */}
-        <div className="col-span-6 bg-slate-50 overflow-y-auto p-6 flex flex-col min-h-0">
+        <div className="col-span-6 bg-slate-50/50 overflow-y-auto p-6 flex flex-col min-h-0">
           {/* Category Tabs */}
-          <div className="flex items-center space-x-1.5 pb-4 border-b border-slate-200 mb-4 overflow-x-auto shrink-0">
+          <div className="flex items-center gap-1.5 p-1.5 bg-slate-200/60 backdrop-blur-xs rounded-2xl border border-slate-200/80 mb-5 overflow-x-auto shrink-0 shadow-inner">
             {[
               { id: "all", label: `All (${items.length})` },
               ...(staleItems.length > 0
@@ -487,14 +494,14 @@ export const ReviewPage: React.FC = () => {
               <button
                 key={cat.id}
                 onClick={() => setCategoryFilter(cat.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
                   categoryFilter === cat.id
                     ? cat.isAlert
-                      ? "bg-amber-600 text-white shadow-2xs font-semibold"
-                      : "bg-sky-600 text-white shadow-2xs font-semibold"
+                      ? "bg-amber-500 text-white shadow-xs font-bold"
+                      : "bg-white text-slate-900 shadow-xs border border-slate-200/60 font-bold"
                     : cat.isAlert
-                    ? "bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200 font-semibold"
-                    : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                    ? "text-amber-800 hover:bg-amber-100/80 font-bold"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-white/60"
                 }`}
               >
                 {cat.label}
@@ -505,25 +512,25 @@ export const ReviewPage: React.FC = () => {
           {/* Items List */}
           <div className="space-y-4 flex-1">
             {filteredItems.length === 0 ? (
-              <div className="text-center py-12 text-slate-500 text-sm bg-white rounded-xl border border-slate-200 p-8 shadow-2xs">
-                <p className="font-semibold text-slate-700">No items found in this category.</p>
-                <p className="text-xs text-slate-400 mt-1 mb-4">
+              <div className="text-center py-12 text-slate-500 text-sm bg-white rounded-2xl border border-slate-200/80 p-8 shadow-card">
+                <p className="font-bold text-slate-800 font-heading">No items found in this category.</p>
+                <p className="text-xs text-slate-400 mt-1 mb-5">
                   You can retry the targeted extraction pass for this category without re-running the entire contract.
                 </p>
                 {categoryFilter in STEP_ID_MAP && (
                   <button
                     onClick={() => handleRetryCategoryStep(STEP_ID_MAP[categoryFilter])}
                     disabled={isRetryingStep}
-                    className="inline-flex items-center px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors disabled:opacity-50"
+                    className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow-xs hover:shadow-glow-sky transition-all active:scale-95 disabled:opacity-50"
                   >
                     {isRetryingStep ? (
                       <>
-                        <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin mr-1.5" />
+                        <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
                         Running Extraction Pass...
                       </>
                     ) : (
                       <>
-                        <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+                        <RefreshCw className="w-3.5 h-3.5 mr-2" />
                         Retry Pass: {categoryFilter.replace("_", " ")}
                       </>
                     )}
@@ -552,47 +559,52 @@ export const ReviewPage: React.FC = () => {
                 return (
                   <div
                     key={item.id}
-                    className={`bg-white rounded-xl border shadow-2xs p-5 transition-shadow hover:shadow-xs ${
-                      isStale ? "border-amber-300 bg-amber-50/20" : "border-slate-200"
+                    className={`bg-white rounded-2xl border transition-all p-5 shadow-card hover:shadow-card-hover ${
+                      isStale ? "border-amber-300 bg-amber-50/20" : "border-slate-200/90"
                     }`}
                   >
                     {/* Item Header */}
                     <div className="flex items-start justify-between">
-                      <div className="flex items-center space-x-2">
-                        <span className="px-2 py-0.5 text-xs font-semibold rounded uppercase tracking-wide bg-slate-100 text-slate-700">
+                      <div className="flex items-center flex-wrap gap-2">
+                        <span className="px-2.5 py-1 text-[11px] font-bold rounded-lg uppercase tracking-wider bg-slate-100 text-slate-700 font-heading">
                           {item.itemType.replace("_", " ")}
                         </span>
 
                         {/* Status badge: Confirmed vs Uncertain */}
                         {item.status === "confirmed" ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/70">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5" />
                             Confirmed
                           </span>
                         ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200/70">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5" />
                             Uncertain (Inferred)
                           </span>
                         )}
 
                         {/* Review Status Badge */}
                         {item.reviewStatus === "stale" && (
-                          <span className="px-2 py-0.5 text-xs rounded bg-amber-100 text-amber-800 border border-amber-300 font-bold flex items-center">
-                            <AlertTriangle className="w-3 h-3 mr-1 text-amber-600" />
+                          <span className="px-2.5 py-1 text-xs rounded-lg bg-amber-100 text-amber-900 border border-amber-300 font-bold flex items-center shadow-2xs">
+                            <AlertTriangle className="w-3.5 h-3.5 mr-1.5 text-amber-600" />
                             Stale - Action Required
                           </span>
                         )}
                         {item.reviewStatus === "approved" && (
-                          <span className="px-2 py-0.5 text-xs rounded bg-sky-50 text-sky-700 border border-sky-200 font-medium">
+                          <span className="px-2.5 py-1 text-xs rounded-lg bg-sky-50 text-sky-700 border border-sky-200/70 font-semibold flex items-center">
+                            <CheckCircle className="w-3 h-3 mr-1 text-sky-600" />
                             Approved
                           </span>
                         )}
                         {item.reviewStatus === "edited_approved" && (
-                          <span className="px-2 py-0.5 text-xs rounded bg-indigo-50 text-indigo-700 border border-indigo-200 font-medium">
+                          <span className="px-2.5 py-1 text-xs rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200/70 font-semibold flex items-center">
+                            <CheckCircle className="w-3 h-3 mr-1 text-indigo-600" />
                             User Edited & Approved
                           </span>
                         )}
                         {item.reviewStatus === "rejected" && (
-                          <span className="px-2 py-0.5 text-xs rounded bg-red-50 text-red-700 border border-red-200 font-medium">
+                          <span className="px-2.5 py-1 text-xs rounded-lg bg-rose-50 text-rose-700 border border-rose-200/70 font-semibold flex items-center">
+                            <XCircle className="w-3 h-3 mr-1 text-rose-600" />
                             Rejected
                           </span>
                         )}
@@ -601,24 +613,26 @@ export const ReviewPage: React.FC = () => {
                       {/* Citation Link */}
                       <button
                         onClick={() => handleCitationClick(item.sourceSectionLabel)}
-                        className="text-xs font-semibold text-sky-600 hover:text-sky-800 flex items-center space-x-1 hover:underline"
+                        className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-sky-50/70 hover:bg-sky-100 text-sky-700 border border-sky-200/70 text-xs font-bold font-mono transition-colors group"
                         title="Click to jump and highlight cited section"
                       >
                         <span>{item.sourceSectionLabel}</span>
-                        {item.page && <span>(p.{item.page})</span>}
-                        <ExternalLink className="w-3 h-3" />
+                        {item.page && <span className="text-sky-600/80">(p.{item.page})</span>}
+                        <ExternalLink className="w-3 h-3 transition-transform group-hover:scale-110" />
                       </button>
                     </div>
 
                     {/* Stale Clause Banner within Card */}
                     {isStale && (
-                      <div className="mt-3 p-3 bg-amber-50 border border-amber-300 rounded-lg text-xs text-amber-900 space-y-1.5">
+                      <div className="mt-3.5 p-3.5 bg-amber-50/90 border border-amber-300 rounded-xl text-xs text-amber-900 space-y-2 shadow-2xs">
                         <div className="font-bold flex items-center text-amber-800">
-                          <AlertTriangle className="w-3.5 h-3.5 mr-1.5 text-amber-600" />
+                          <AlertTriangle className="w-4 h-4 mr-1.5 text-amber-600 shrink-0" />
                           Clause Modified in New Version:{" "}
-                          <span className="ml-1 font-normal font-mono">{item.staleReason || "clause changed"}</span>
+                          <span className="ml-1 font-mono font-normal bg-amber-100/80 px-1.5 py-0.5 rounded border border-amber-200">
+                            {item.staleReason || "clause changed"}
+                          </span>
                         </div>
-                        <p className="text-[11px] text-amber-700">
+                        <p className="text-[11px] text-amber-800/90 leading-relaxed">
                           This obligation or deadline was approved in prior version, but the text of its underlying section changed. Please re-confirm if the item still applies or dismiss it.
                         </p>
                         <div className="pt-1">
@@ -629,7 +643,7 @@ export const ReviewPage: React.FC = () => {
                               setStaleNotes((prev) => ({ ...prev, [item.id]: e.target.value }))
                             }
                             placeholder="Optional audit rationale (e.g. verified still applies under Section 2.1)..."
-                            className="w-full text-xs p-2 bg-white border border-amber-300 rounded-md focus:outline-none focus:ring-1 focus:ring-amber-500 font-sans"
+                            className="w-full text-xs p-2.5 bg-white border border-amber-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 font-sans shadow-inner"
                           />
                         </div>
                       </div>
@@ -637,7 +651,7 @@ export const ReviewPage: React.FC = () => {
 
                     {/* Citation Warnings */}
                     {!item.citationVerified && !isStale && (
-                      <div className="mt-2.5 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 flex items-start space-x-2">
+                      <div className="mt-3 p-3 bg-amber-50 border border-amber-200/80 rounded-xl text-xs text-amber-900 flex items-start space-x-2">
                         <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                         <div>
                           <span className="font-bold">Citation Warning: </span>
@@ -647,93 +661,93 @@ export const ReviewPage: React.FC = () => {
                     )}
 
                     {/* Verbatim Source Quote */}
-                    <div className="mt-3 bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                    <div className="mt-3.5 bg-gradient-to-r from-slate-50/90 to-white border-l-4 border-l-sky-500 border-y border-r border-slate-200/70 rounded-r-xl p-3.5 text-xs shadow-2xs">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1 font-heading">
                         Exact Verbatim Quote
                       </span>
-                      <p className="font-mono text-slate-800 italic">"{item.exactQuote}"</p>
+                      <p className="font-mono text-slate-800 italic leading-relaxed">"{item.exactQuote}"</p>
                     </div>
 
                     {/* Item Value Content */}
-                    <div className="mt-3">
+                    <div className="mt-3.5">
                       {isEditing ? (
-                        <div className="space-y-2">
+                        <div className="space-y-2.5 bg-slate-50/60 p-4 rounded-xl border border-slate-200">
                           <textarea
                             rows={3}
                             value={editText}
                             onChange={(e) => setEditText(e.target.value)}
-                            className="w-full text-xs font-mono p-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-sky-500 focus:outline-none"
+                            className="w-full text-xs font-mono p-3 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-sky-500 focus:outline-none shadow-inner"
                           />
                           <input
                             type="text"
                             placeholder="Reason for change (recorded in audit log)..."
                             value={editNote}
                             onChange={(e) => setEditNote(e.target.value)}
-                            className="w-full text-xs p-2 border border-slate-300 rounded-lg"
+                            className="w-full text-xs p-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-sky-500 focus:outline-none shadow-inner"
                           />
-                          <div className="flex justify-end space-x-2">
+                          <div className="flex justify-end space-x-2 pt-1">
                             <button
                               onClick={() => setEditingItemId(null)}
-                              className="px-3 py-1 border border-slate-300 rounded text-xs text-slate-600 hover:bg-slate-50"
+                              className="px-3.5 py-1.5 border border-slate-300 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-100 transition-colors"
                             >
                               Cancel
                             </button>
                             <button
                               onClick={() => saveEdit(item)}
-                              className="px-3 py-1 bg-sky-600 text-white rounded text-xs font-semibold hover:bg-sky-700"
+                              className="px-4 py-1.5 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow-xs hover:shadow-glow-sky transition-all active:scale-95"
                             >
                               Save Edit
                             </button>
                           </div>
                         </div>
                       ) : (
-                        <div className="text-xs text-slate-800 space-y-1">
+                        <div className="text-xs text-slate-800 space-y-1.5 bg-slate-50/40 p-3 rounded-xl border border-slate-100">
                           {parsedVal.name && (
                             <p>
-                              <span className="font-semibold text-slate-600">Party: </span>
-                              {parsedVal.name}
+                              <span className="font-semibold text-slate-500">Party: </span>
+                              <span className="font-bold text-slate-900">{parsedVal.name}</span>
                             </p>
                           )}
                           {parsedVal.effectiveDate && (
                             <p>
-                              <span className="font-semibold text-slate-600">Effective Date: </span>
-                              {parsedVal.effectiveDate}
+                              <span className="font-semibold text-slate-500">Effective Date: </span>
+                              <span className="font-mono font-bold text-slate-900">{parsedVal.effectiveDate}</span>
                             </p>
                           )}
                           {parsedVal.expirationDate && (
                             <p>
-                              <span className="font-semibold text-slate-600">Expiration Date: </span>
-                              {parsedVal.expirationDate}
+                              <span className="font-semibold text-slate-500">Expiration Date: </span>
+                              <span className="font-mono font-bold text-slate-900">{parsedVal.expirationDate}</span>
                             </p>
                           )}
                           {parsedVal.description && (
                             <p>
-                              <span className="font-semibold text-slate-600">Description: </span>
-                              {parsedVal.description}
+                              <span className="font-semibold text-slate-500">Description: </span>
+                              <span className="text-slate-800">{parsedVal.description}</span>
                             </p>
                           )}
                           {parsedVal.obligor && (
                             <p>
-                              <span className="font-semibold text-slate-600">Responsible Party: </span>
-                              {parsedVal.obligor}
+                              <span className="font-semibold text-slate-500">Responsible Party: </span>
+                              <span className="font-bold text-slate-900">{parsedVal.obligor}</span>
                             </p>
                           )}
                           {parsedVal.question && (
-                            <div className="p-3 bg-sky-50 border border-sky-100 rounded-lg text-sky-950 mt-2">
-                              <p className="font-semibold text-sky-900 mb-1 flex items-center">
-                                <MessageSquare className="w-3.5 h-3.5 mr-1" />
+                            <div className="p-3.5 bg-sky-50/70 border border-sky-100 rounded-xl text-sky-950 mt-2">
+                              <p className="font-bold text-sky-900 mb-1.5 flex items-center font-heading">
+                                <MessageSquare className="w-3.5 h-3.5 mr-1.5 text-sky-600" />
                                 Clarification Needed:
                               </p>
-                              <p>{parsedVal.question}</p>
+                              <p className="text-slate-800 leading-relaxed">{parsedVal.question}</p>
                               {Array.isArray(parsedVal.options) && (
-                                <ul className="list-disc pl-5 mt-1 space-y-0.5 text-sky-800">
+                                <ul className="list-disc pl-5 mt-2 space-y-1 text-sky-900 font-medium">
                                   {parsedVal.options.map((opt: string, i: number) => (
                                     <li key={i}>{opt}</li>
                                   ))}
                                 </ul>
                               )}
                               {parsedVal.userAnswer && (
-                                <p className="mt-2 text-xs font-bold text-sky-800">
+                                <p className="mt-2.5 text-xs font-bold text-sky-900 bg-sky-100/70 p-2 rounded-lg border border-sky-200/60">
                                   Recorded Decision: {String(parsedVal.userAnswer)}
                                 </p>
                               )}
@@ -743,7 +757,7 @@ export const ReviewPage: React.FC = () => {
                             !parsedVal.description &&
                             !parsedVal.effectiveDate &&
                             !parsedVal.question && (
-                              <pre className="text-[11px] font-mono bg-slate-50 p-2 rounded border border-slate-100 overflow-x-auto">
+                              <pre className="text-[11px] font-mono bg-white p-2.5 rounded-lg border border-slate-200 overflow-x-auto text-slate-800">
                                 {item.currentValue}
                               </pre>
                             )}
@@ -753,16 +767,16 @@ export const ReviewPage: React.FC = () => {
 
                     {/* Calculated Dates & Override Box */}
                     {item.calculatedDate && (
-                      <div className="mt-3 p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between text-xs">
-                        <div className="flex items-center space-x-2">
-                          <Calendar className="w-4 h-4 text-sky-600" />
+                      <div className="mt-3.5 p-3 bg-gradient-to-r from-sky-50/50 to-slate-50 border border-sky-100/80 rounded-xl flex items-center justify-between text-xs shadow-2xs">
+                        <div className="flex items-center space-x-2.5">
+                          <Calendar className="w-4 h-4 text-sky-600 shrink-0" />
                           <div>
-                            <span className="font-semibold text-slate-700">Calculated Deadline: </span>
-                            <span className="font-mono text-slate-900 font-bold">
+                            <span className="font-semibold text-slate-600">Calculated Deadline: </span>
+                            <span className="font-mono text-slate-900 font-bold bg-white px-2 py-0.5 rounded border border-slate-200/70 ml-1">
                               {new Date(item.calculatedDate).toLocaleDateString()}
                             </span>
                             {item.dateResolutionReason && (
-                              <span className="text-[11px] text-slate-400 block">
+                              <span className="text-[11px] text-slate-400 block mt-0.5">
                                 {item.dateResolutionReason}
                               </span>
                             )}
@@ -775,17 +789,17 @@ export const ReviewPage: React.FC = () => {
                               type="date"
                               value={newDateVal}
                               onChange={(e) => setNewDateVal(e.target.value)}
-                              className="p-1 border border-slate-300 rounded text-xs"
+                              className="p-1.5 border border-slate-300 rounded-xl text-xs bg-white focus:ring-2 focus:ring-sky-500 focus:outline-none"
                             />
                             <button
                               onClick={() => saveDateOverride(item)}
-                              className="px-2 py-1 bg-sky-600 text-white rounded text-xs font-semibold"
+                              className="px-3 py-1.5 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow-xs active:scale-95 transition-all"
                             >
                               Save
                             </button>
                             <button
                               onClick={() => setOverridingDateId(null)}
-                              className="px-2 py-1 border border-slate-300 rounded text-xs text-slate-600"
+                              className="px-3 py-1.5 border border-slate-300 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-100 transition-colors"
                             >
                               Cancel
                             </button>
@@ -796,7 +810,7 @@ export const ReviewPage: React.FC = () => {
                               setOverridingDateId(item.id);
                               setNewDateVal(item.calculatedDate?.split("T")[0] || "");
                             }}
-                            className="text-[11px] font-semibold text-sky-600 hover:underline"
+                            className="text-xs font-bold text-sky-600 hover:text-sky-800 hover:underline px-2.5 py-1 rounded-lg hover:bg-sky-50/80 transition-colors"
                           >
                             Override Date
                           </button>
@@ -806,26 +820,26 @@ export const ReviewPage: React.FC = () => {
 
                     {/* Clarification Answer Interface */}
                     {item.itemType === "clarification_question" && (
-                      <div className="mt-3">
+                      <div className="mt-3.5">
                         {isAnsweringQuestion ? (
-                          <div className="space-y-2">
+                          <div className="space-y-2.5 bg-sky-50/40 p-3.5 rounded-xl border border-sky-100">
                             <textarea
                               rows={2}
                               value={questionAnswer}
                               onChange={(e) => setQuestionAnswer(e.target.value)}
                               placeholder="Record factual understanding or party response..."
-                              className="w-full p-2 border border-slate-300 rounded text-xs"
+                              className="w-full p-2.5 border border-slate-300 rounded-xl text-xs bg-white focus:ring-2 focus:ring-sky-500 focus:outline-none"
                             />
                             <div className="flex justify-end space-x-2">
                               <button
                                 onClick={() => setAnsweringQuestionId(null)}
-                                className="px-2.5 py-1 border border-slate-300 rounded text-xs text-slate-600"
+                                className="px-3 py-1.5 border border-slate-300 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-100 transition-colors"
                               >
                                 Cancel
                               </button>
                               <button
                                 onClick={() => saveQuestionAnswer(item)}
-                                className="px-3 py-1 bg-sky-600 text-white rounded text-xs font-semibold"
+                                className="px-3.5 py-1.5 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow-xs active:scale-95 transition-all"
                               >
                                 Record Answer
                               </button>
@@ -839,9 +853,9 @@ export const ReviewPage: React.FC = () => {
                                 typeof parsedVal.userAnswer === "string" ? parsedVal.userAnswer : ""
                               );
                             }}
-                            className="inline-flex items-center text-xs font-semibold text-sky-600 hover:underline"
+                            className="inline-flex items-center text-xs font-bold text-sky-600 hover:text-sky-800 hover:underline px-2 py-1 rounded-lg hover:bg-sky-50/80 transition-colors"
                           >
-                            <MessageSquare className="w-3 h-3 mr-1" />
+                            <MessageSquare className="w-3.5 h-3.5 mr-1.5" />
                             {parsedVal.userAnswer ? "Edit Answer" : "Answer Question"}
                           </button>
                         )}
@@ -849,7 +863,7 @@ export const ReviewPage: React.FC = () => {
                     )}
 
                     {/* Action Bar */}
-                    <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+                    <div className="mt-4 pt-3.5 border-t border-slate-100 flex items-center justify-between">
                       {isStale ? (
                         /* Stale Item Actions: Re-confirm or Dismiss */
                         <div className="flex items-center justify-between w-full">
@@ -857,27 +871,27 @@ export const ReviewPage: React.FC = () => {
                             <button
                               onClick={() => handleResolveStale(item.id, "reconfirm")}
                               disabled={resolvingStaleId === item.id}
-                              className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition-colors"
+                              className="inline-flex items-center px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs hover:shadow-glow-emerald active:scale-95 transition-all"
                             >
-                              <CheckCircle className="w-3.5 h-3.5 mr-1" />
+                              <CheckCircle className="w-3.5 h-3.5 mr-1.5" />
                               Re-confirm (Keep Approved)
                             </button>
 
                             <button
                               onClick={() => handleResolveStale(item.id, "dismiss")}
                               disabled={resolvingStaleId === item.id}
-                              className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 transition-colors"
+                              className="inline-flex items-center px-4 py-2 rounded-xl text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 active:scale-95 transition-all"
                             >
-                              <XCircle className="w-3.5 h-3.5 mr-1" />
+                              <XCircle className="w-3.5 h-3.5 mr-1.5" />
                               Dismiss (Mark Rejected)
                             </button>
                           </div>
 
                           <button
                             onClick={() => startEdit(item)}
-                            className="inline-flex items-center px-2.5 py-1 text-xs text-slate-600 hover:text-slate-900 border border-slate-200 rounded hover:bg-slate-50 transition-colors"
+                            className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 border border-slate-200/90 rounded-xl hover:bg-slate-100 active:scale-95 transition-all shadow-2xs"
                           >
-                            <Edit3 className="w-3 h-3 mr-1" />
+                            <Edit3 className="w-3 h-3 mr-1.5" />
                             Edit Value First
                           </button>
                         </div>
@@ -888,35 +902,35 @@ export const ReviewPage: React.FC = () => {
                             <button
                               onClick={() => handleApprove(item)}
                               disabled={item.reviewStatus === "approved"}
-                              className={`inline-flex items-center px-3 py-1 rounded text-xs font-semibold transition-colors ${
+                              className={`inline-flex items-center px-4 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 shadow-xs ${
                                 item.reviewStatus === "approved"
-                                  ? "bg-slate-100 text-slate-400 cursor-not-allowed"
-                                  : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                                  ? "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
+                                  : "bg-emerald-600 hover:bg-emerald-500 text-white hover:shadow-glow-emerald"
                               }`}
                             >
-                              <CheckCircle className="w-3.5 h-3.5 mr-1" />
+                              <CheckCircle className="w-3.5 h-3.5 mr-1.5" />
                               Approve
                             </button>
 
                             <button
                               onClick={() => handleReject(item)}
                               disabled={item.reviewStatus === "rejected"}
-                              className={`inline-flex items-center px-3 py-1 rounded text-xs font-semibold transition-colors ${
+                              className={`inline-flex items-center px-4 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 border ${
                                 item.reviewStatus === "rejected"
-                                  ? "bg-slate-100 text-slate-400 cursor-not-allowed"
-                                  : "bg-red-50 text-red-700 border border-red-200 hover:bg-red-100"
+                                  ? "bg-slate-100 text-slate-400 cursor-not-allowed border-slate-200"
+                                  : "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100 hover:border-rose-300"
                               }`}
                             >
-                              <XCircle className="w-3.5 h-3.5 mr-1" />
+                              <XCircle className="w-3.5 h-3.5 mr-1.5" />
                               Reject
                             </button>
                           </div>
 
                           <button
                             onClick={() => startEdit(item)}
-                            className="inline-flex items-center px-2.5 py-1 text-xs text-slate-600 hover:text-slate-900 border border-slate-200 rounded hover:bg-slate-50 transition-colors"
+                            className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 border border-slate-200/90 rounded-xl hover:bg-slate-100 active:scale-95 transition-all shadow-2xs"
                           >
-                            <Edit3 className="w-3 h-3 mr-1" />
+                            <Edit3 className="w-3 h-3 mr-1.5" />
                             Edit
                           </button>
                         </>

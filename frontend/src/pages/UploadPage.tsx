@@ -3,13 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { uploadContract, retryExtractionStep } from "../services/api.js";
 import {
   Upload,
-  FileText,
   AlertCircle,
   Loader2,
   ArrowRight,
   CheckCircle2,
   XCircle,
   RefreshCw,
+  FileCheck,
+  BookOpen,
 } from "lucide-react";
 
 interface PipelineStep {
@@ -265,19 +266,27 @@ export const UploadPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8 relative">
+    <div className="max-w-4xl mx-auto px-4 py-8 relative flex-1 flex flex-col justify-center">
+      {/* Header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-900">Upload Contract for Extraction</h1>
+        <div className="flex items-center space-x-2">
+          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-sky-100 text-sky-800 border border-sky-200 uppercase tracking-wider">
+            Ingestion & Extraction
+          </span>
+        </div>
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight mt-2">
+          Upload Contract for Extraction
+        </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Upload a digital contract (PDF, DOCX, or text) and optionally an organizational policy document to cross-check terms.
+          Upload a digital contract (PDF, DOCX, or text) and optionally an organizational policy document to cross-check terms with verbatim citations.
         </p>
       </div>
 
       {errorMessage && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start space-x-3 text-sm text-red-700 animate-in fade-in duration-150">
-          <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+        <div className="mb-6 p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-start space-x-3 text-sm text-rose-800 shadow-2xs animate-in fade-in duration-150">
+          <AlertCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
           <div className="flex-1">
-            <span className="font-semibold">Validation error: </span>
+            <span className="font-bold">Validation error: </span>
             {errorMessage}
           </div>
         </div>
@@ -285,32 +294,37 @@ export const UploadPage: React.FC = () => {
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Contract Title */}
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-2xs">
-          <label className="block text-sm font-semibold text-slate-800 mb-1">
+        <div className="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-card">
+          <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">
             Contract Title / Identifier
           </label>
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. Master Services Agreement with Acme Corp"
-            className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+            placeholder="e.g. Master Cloud Services Agreement with Acme Corp"
+            className="w-full px-4 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 focus:bg-white shadow-2xs transition-all"
           />
         </div>
 
         {/* Primary Contract Input */}
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-2xs">
-          <div className="flex items-center justify-between mb-4">
+        <div className="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-card">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
             <div>
-              <h2 className="text-base font-semibold text-slate-900">Contract Document (Required)</h2>
-              <p className="text-xs text-slate-500">Text-based PDF, DOCX, or plain text (Max 10 MB)</p>
+              <div className="flex items-center space-x-2">
+                <h2 className="text-base font-bold text-slate-900">Contract Document</h2>
+                <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wide bg-sky-50 text-sky-700 border border-sky-200">
+                  Required
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">Text-based PDF, DOCX, or plain text (Max 10 MB)</p>
             </div>
-            <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-100 text-xs font-medium">
+            <div className="inline-flex rounded-xl border border-slate-200 p-1 bg-slate-100/80 text-xs font-bold">
               <button
                 type="button"
                 onClick={() => setContractMode("file")}
-                className={`px-3 py-1 rounded-md transition-colors ${
-                  contractMode === "file" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-600 hover:text-slate-900"
+                className={`px-3.5 py-1.5 rounded-lg transition-all ${
+                  contractMode === "file" ? "bg-white text-slate-900 shadow-2xs font-bold" : "text-slate-600 hover:text-slate-900"
                 }`}
               >
                 Upload File
@@ -318,8 +332,8 @@ export const UploadPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setContractMode("paste")}
-                className={`px-3 py-1 rounded-md transition-colors ${
-                  contractMode === "paste" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-600 hover:text-slate-900"
+                className={`px-3.5 py-1.5 rounded-lg transition-all ${
+                  contractMode === "paste" ? "bg-white text-slate-900 shadow-2xs font-bold" : "text-slate-600 hover:text-slate-900"
                 }`}
               >
                 Paste Text
@@ -328,7 +342,7 @@ export const UploadPage: React.FC = () => {
           </div>
 
           {contractMode === "file" ? (
-            <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center hover:border-sky-500 transition-colors bg-slate-50/50">
+            <div className="border-2 border-dashed border-slate-300 hover:border-sky-500 rounded-2xl p-8 text-center transition-all bg-gradient-to-b from-slate-50/50 to-white group">
               <input
                 type="file"
                 id="contract-file-input"
@@ -337,21 +351,31 @@ export const UploadPage: React.FC = () => {
                 className="hidden"
               />
               <label htmlFor="contract-file-input" className="cursor-pointer block">
-                <Upload className="w-10 h-10 text-slate-400 mx-auto mb-3" />
+                <div className="w-12 h-12 rounded-2xl bg-sky-50 border border-sky-100 text-sky-600 flex items-center justify-center mx-auto mb-3.5 group-hover:scale-105 transition-transform shadow-2xs">
+                  <Upload className="w-6 h-6" />
+                </div>
                 {contractFile ? (
                   <div className="text-sm">
-                    <span className="font-semibold text-sky-600">{contractFile.name}</span>
-                    <p className="text-xs text-slate-500 mt-1">
-                      {(contractFile.size / (1024 * 1024)).toFixed(2)} MB - Click to change
+                    <div className="inline-flex items-center space-x-1.5 px-3 py-1 bg-sky-50 text-sky-800 rounded-lg border border-sky-200 font-bold">
+                      <FileCheck className="w-4 h-4 text-sky-600" />
+                      <span>{contractFile.name}</span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-2 font-medium">
+                      {(contractFile.size / (1024 * 1024)).toFixed(2)} MB &bull; Click to choose another file
                     </p>
                   </div>
                 ) : (
                   <div>
-                    <span className="text-sm font-semibold text-sky-600 hover:underline">
+                    <span className="text-sm font-bold text-sky-600 group-hover:text-sky-700">
                       Click to choose a file
                     </span>
-                    <span className="text-sm text-slate-500"> or drag and drop</span>
-                    <p className="text-xs text-slate-400 mt-1">PDF, DOCX, TXT up to 10 MB (Digital text only)</p>
+                    <span className="text-sm text-slate-500 font-medium"> or drag and drop</span>
+                    <div className="flex items-center justify-center space-x-2 mt-2">
+                      <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-bold">PDF</span>
+                      <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-bold">DOCX</span>
+                      <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-bold">TXT</span>
+                      <span className="text-[11px] text-slate-400 font-medium">Max 10 MB (Digital text only)</span>
+                    </div>
                   </div>
                 )}
               </label>
@@ -362,26 +386,31 @@ export const UploadPage: React.FC = () => {
               value={contractText}
               onChange={(e) => setContractText(e.target.value)}
               placeholder="Paste full contract text here with sections and numbered clauses..."
-              className="w-full p-3.5 border border-slate-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+              className="w-full p-4 bg-slate-50/50 border border-slate-200 rounded-xl text-xs sm:text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 focus:bg-white shadow-2xs transition-all leading-relaxed"
             />
           )}
         </div>
 
         {/* Optional Policy Document Input */}
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-2xs">
-          <div className="flex items-center justify-between mb-4">
+        <div className="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-card">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
             <div>
-              <h2 className="text-base font-semibold text-slate-900">Organizational Policy (Optional)</h2>
-              <p className="text-xs text-slate-500">
+              <div className="flex items-center space-x-2">
+                <h2 className="text-base font-bold text-slate-900">Organizational Policy Guidelines</h2>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-slate-100 text-slate-600">
+                  Optional
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
                 Cross-reference contract terms against your internal guidelines (Max 10 MB)
               </p>
             </div>
-            <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-100 text-xs font-medium">
+            <div className="inline-flex rounded-xl border border-slate-200 p-1 bg-slate-100/80 text-xs font-bold">
               <button
                 type="button"
                 onClick={() => setPolicyMode("file")}
-                className={`px-3 py-1 rounded-md transition-colors ${
-                  policyMode === "file" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-600 hover:text-slate-900"
+                className={`px-3.5 py-1.5 rounded-lg transition-all ${
+                  policyMode === "file" ? "bg-white text-slate-900 shadow-2xs font-bold" : "text-slate-600 hover:text-slate-900"
                 }`}
               >
                 Upload File
@@ -389,8 +418,8 @@ export const UploadPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setPolicyMode("paste")}
-                className={`px-3 py-1 rounded-md transition-colors ${
-                  policyMode === "paste" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-600 hover:text-slate-900"
+                className={`px-3.5 py-1.5 rounded-lg transition-all ${
+                  policyMode === "paste" ? "bg-white text-slate-900 shadow-2xs font-bold" : "text-slate-600 hover:text-slate-900"
                 }`}
               >
                 Paste Text
@@ -399,7 +428,7 @@ export const UploadPage: React.FC = () => {
           </div>
 
           {policyMode === "file" ? (
-            <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center hover:border-slate-400 transition-colors bg-slate-50/50">
+            <div className="border-2 border-dashed border-slate-200 hover:border-slate-400 rounded-2xl p-6 text-center transition-all bg-slate-50/40">
               <input
                 type="file"
                 id="policy-file-input"
@@ -408,20 +437,20 @@ export const UploadPage: React.FC = () => {
                 className="hidden"
               />
               <label htmlFor="policy-file-input" className="cursor-pointer block">
-                <FileText className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+                <BookOpen className="w-8 h-8 text-slate-400 mx-auto mb-2" />
                 {policyFile ? (
                   <div className="text-sm">
-                    <span className="font-semibold text-slate-700">{policyFile.name}</span>
-                    <p className="text-xs text-slate-500 mt-1">
-                      {(policyFile.size / (1024 * 1024)).toFixed(2)} MB - Click to change
+                    <span className="font-bold text-slate-800">{policyFile.name}</span>
+                    <p className="text-xs text-slate-500 mt-1 font-medium">
+                      {(policyFile.size / (1024 * 1024)).toFixed(2)} MB &bull; Click to change
                     </p>
                   </div>
                 ) : (
                   <div>
-                    <span className="text-xs font-semibold text-slate-600 hover:underline">
+                    <span className="text-xs font-bold text-slate-700 hover:underline">
                       Optional: Choose policy document
                     </span>
-                    <p className="text-xs text-slate-400 mt-1">PDF, DOCX, TXT</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">PDF, DOCX, TXT</p>
                   </div>
                 )}
               </label>
@@ -432,17 +461,17 @@ export const UploadPage: React.FC = () => {
               value={policyText}
               onChange={(e) => setPolicyText(e.target.value)}
               placeholder="Optional: Paste policy guidelines, standards, or vendor requirements here..."
-              className="w-full p-3.5 border border-slate-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+              className="w-full p-4 bg-slate-50/50 border border-slate-200 rounded-xl text-xs sm:text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 focus:bg-white shadow-2xs transition-all leading-relaxed"
             />
           )}
         </div>
 
         {/* Submit Button */}
-        <div className="flex justify-end">
+        <div className="flex justify-end pt-2">
           <button
             type="submit"
             disabled={loading}
-            className="inline-flex items-center px-6 py-2.5 rounded-lg text-sm font-semibold bg-sky-600 hover:bg-sky-700 text-white shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex items-center px-7 py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-sky-600 via-sky-500 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white shadow-xs hover:shadow-glow-sky active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Ingest & Run 5-Pass Extraction
             <ArrowRight className="w-4 h-4 ml-2" />
@@ -452,19 +481,19 @@ export const UploadPage: React.FC = () => {
 
       {/* 5-PASS EXTRACTION PIPELINE PROGRESS MODAL */}
       {loading && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-xl w-full p-6 border border-slate-200">
-            <div className="flex items-center space-x-3 mb-6">
-              <div className="w-10 h-10 rounded-xl bg-sky-50 border border-sky-100 flex items-center justify-center text-sky-600">
-                <Loader2 className="w-5 h-5 animate-spin" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-xl w-full p-6 sm:p-8 border border-slate-200 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center space-x-3.5 mb-6">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-sky-50 to-indigo-50 border border-sky-100 flex items-center justify-center text-sky-600 shadow-2xs">
+                <Loader2 className="w-6 h-6 animate-spin text-sky-600" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-900">
+                <h3 className="text-lg font-bold text-slate-900">
                   {hasStepErrors
                     ? "Extraction Finished with Warnings"
                     : "Running 5-Pass Extraction Pipeline..."}
                 </h3>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-500 mt-0.5">
                   Targeted, single-responsibility extraction with verbatim source quote verification
                 </p>
               </div>
@@ -481,25 +510,25 @@ export const UploadPage: React.FC = () => {
                 return (
                   <div
                     key={step.id}
-                    className={`p-3.5 rounded-xl border transition-all ${
+                    className={`p-4 rounded-2xl border transition-all ${
                       isActive
-                        ? "bg-sky-50/60 border-sky-300 ring-2 ring-sky-100 shadow-2xs"
+                        ? "bg-sky-50/70 border-sky-300 ring-2 ring-sky-100 shadow-2xs"
                         : isCompleted
                         ? "bg-emerald-50/40 border-emerald-200"
                         : isError
                         ? "bg-rose-50 border-rose-200"
-                        : "bg-slate-50/50 border-slate-200 opacity-60"
+                        : "bg-slate-50/50 border-slate-200/80 opacity-60"
                     }`}
                   >
-                    <div className="flex items-start justify-between">
+                    <div className="flex items-start justify-between gap-3">
                       <div className="flex items-start space-x-3">
                         {/* Step Status Icon */}
                         <div className="mt-0.5">
-                          {isCompleted && <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />}
-                          {isActive && <Loader2 className="w-4 h-4 text-sky-600 animate-spin shrink-0" />}
-                          {isError && <XCircle className="w-4 h-4 text-rose-600 shrink-0" />}
+                          {isCompleted && <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />}
+                          {isActive && <Loader2 className="w-5 h-5 text-sky-600 animate-spin shrink-0" />}
+                          {isError && <XCircle className="w-5 h-5 text-rose-600 shrink-0" />}
                           {isWaiting && (
-                            <span className="w-4 h-4 rounded-full border border-slate-300 flex items-center justify-center text-[10px] text-slate-400 font-bold shrink-0">
+                            <span className="w-5 h-5 rounded-full border border-slate-300 flex items-center justify-center text-[11px] text-slate-400 font-bold shrink-0">
                               {index + 1}
                             </span>
                           )}
@@ -507,7 +536,7 @@ export const UploadPage: React.FC = () => {
 
                         <div>
                           <p
-                            className={`text-xs font-bold ${
+                            className={`text-xs sm:text-sm font-bold ${
                               isCompleted
                                 ? "text-emerald-900"
                                 : isActive
@@ -523,7 +552,7 @@ export const UploadPage: React.FC = () => {
                             {step.description}
                           </p>
                           {isError && step.error && (
-                            <p className="text-[11px] text-rose-700 font-mono mt-1 bg-white/70 p-1.5 rounded border border-rose-200">
+                            <p className="text-[11px] text-rose-700 font-mono mt-1.5 bg-white/80 p-2 rounded-lg border border-rose-200">
                               Error: {step.error}
                             </p>
                           )}
@@ -536,16 +565,16 @@ export const UploadPage: React.FC = () => {
                           type="button"
                           onClick={() => handleRetryStep(step.id)}
                           disabled={retryingStepId === step.id}
-                          className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded text-[11px] font-semibold shadow-2xs transition-colors flex items-center shrink-0 ml-2"
+                          className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-2xs transition-colors flex items-center shrink-0 ml-2"
                         >
                           {retryingStepId === step.id ? (
                             <>
-                              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                              <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
                               Retrying...
                             </>
                           ) : (
                             <>
-                              <RefreshCw className="w-3 h-3 mr-1" />
+                              <RefreshCw className="w-3 h-3 mr-1.5" />
                               Retry Pass
                             </>
                           )}
@@ -559,14 +588,14 @@ export const UploadPage: React.FC = () => {
 
             {/* Stepper Footer */}
             {hasStepErrors && createdContractId && (
-              <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                <p className="text-xs text-amber-700 font-medium">
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                <p className="text-xs text-amber-800 font-medium">
                   Some passes had errors, but succeeded passes were persisted.
                 </p>
                 <button
                   type="button"
                   onClick={() => navigate(`/contracts/${createdContractId}`)}
-                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors flex items-center"
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-2xs transition-colors flex items-center"
                 >
                   Continue to Contract Review
                   <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
