@@ -257,6 +257,9 @@ Client shall pay monthly invoices within thirty (30) days.
   });
 
   afterAll(async () => {
+    if (contractId) {
+      await prisma.contract.delete({ where: { id: contractId } }).catch(() => {});
+    }
     await app.close();
   });
 
