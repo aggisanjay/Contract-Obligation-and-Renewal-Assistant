@@ -160,4 +160,20 @@ Vendor will use commercially reasonable efforts to resolve support tickets promp
       expect(bulkRes.body.skippedItemIds).toContain(ambiguity.id);
     }
   });
+
+  it("DELETE /api/contracts/:id - deletes contract and cascades related data cleanly", async () => {
+    const deleteRes = await request(app.server).delete(`/api/contracts/${contractId}`);
+    expect(deleteRes.status).toBe(200);
+    expect(deleteRes.body.success).toBe(true);
+    expect(deleteRes.body.deletedId).toBe(contractId);
+
+    // Verify contract is gone
+    const getRes = await request(app.server).get(`/api/contracts/${contractId}`);
+    expect(getRes.status).toBe(404);
+
+    // Verify 404 when deleting already deleted contract
+    const repeatDelete = await request(app.server).delete(`/api/contracts/${contractId}`);
+    expect(repeatDelete.status).toBe(404);
+  });
 });
+

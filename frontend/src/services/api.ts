@@ -187,3 +187,17 @@ export async function generateContractSummary(contractId: string): Promise<{ sum
   }
   return data;
 }
+
+export async function deleteContract(
+  contractId: string
+): Promise<{ success: boolean; message: string; deletedId: string }> {
+  const res = await fetch(`${API_BASE}/contracts/${contractId}`, {
+    method: "DELETE",
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data?.error?.message || "Failed to delete contract");
+  }
+  return data;
+}
+

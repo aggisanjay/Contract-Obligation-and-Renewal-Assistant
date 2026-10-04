@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import {
   getContract,
   reviewItem,
   bulkApproveItems,
   getAuditLog,
+  deleteContract,
   ContractDetailsResponse,
 } from "../services/api.js";
 import { ExtractedItem, AuditLog } from "@contract-assistant/shared";
@@ -19,10 +20,13 @@ import {
   ExternalLink,
   MessageSquare,
   Sparkles,
+  Trash2,
+  X,
 } from "lucide-react";
 
 export const ReviewPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
 
   const [data, setData] = useState<ContractDetailsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,6 +41,11 @@ export const ReviewPage: React.FC = () => {
   // Audit log modal state
   const [showAuditModal, setShowAuditModal] = useState(false);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+
+  // Delete contract modal state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Item editing state
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
@@ -149,6 +158,19 @@ export const ReviewPage: React.FC = () => {
     setShowAuditModal(true);
   };
 
+  const handleDeleteContract = async () => {
+    if (!id) return;
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteContract(id);
+      navigate("/");
+    } catch (err: any) {
+      setDeleteError(err?.message || "Failed to delete contract");
+      setIsDeleting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center p-12">
@@ -244,6 +266,18 @@ export const ReviewPage: React.FC = () => {
               Bulk Approve Verified ({eligibleBulkCount})
             </button>
           )}
+
+          <button
+            onClick={() => {
+              setDeleteError(null);
+              setShowDeleteModal(true);
+            }}
+            className="inline-flex items-center px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold text-rose-600 hover:bg-rose-50 hover:border-rose-300 transition-colors shadow-2xs"
+            title="Delete this contract"
+          >
+            <Trash2 className="w-3.5 h-3.5 mr-1.5 text-rose-500" />
+            Delete Contract
+          </button>
         </div>
       </div>
 
@@ -687,6 +721,70 @@ export const ReviewPage: React.FC = () => {
                   </div>
                 ))
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-2xs p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start space-x-3">
+              <div className="w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-base font-bold text-slate-900">Delete Contract</h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Are you sure you want to delete <span className="font-semibold text-slate-800">"{contract.title}"</span>?
+                </p>
+                <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
+                  <p className="font-semibold">This action cannot be undone.</p>
+                  <p className="mt-0.5 text-amber-700">
+                    All document versions, extracted clauses, citations, deadline calculations, and audit history will be permanently deleted.
+                  </p>
+                </div>
+                {deleteError && (
+                  <p className="mt-2 text-xs text-rose-600 font-medium">{deleteError}</p>
+                )}
+              </div>
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                disabled={isDeleting}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end space-x-3">
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                disabled={isDeleting}
+                className="px-3.5 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteContract}
+                disabled={isDeleting}
+                className="inline-flex items-center px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors disabled:opacity-50"
+              >
+                {isDeleting ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin mr-1.5"></div>
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                    Delete Contract
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>

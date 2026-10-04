@@ -519,4 +519,30 @@ export async function contractRoutes(app: FastifyInstance) {
 
     return reply.send({ contracts: results });
   });
+
+  /**
+   * Delete a contract and all cascading data (versions, sections, items, audit logs, summaries)
+   */
+  app.delete("/api/contracts/:id", async (req: FastifyRequest, reply: FastifyReply) => {
+    const { id } = req.params as { id: string };
+
+    const contract = await prisma.contract.findUnique({
+      where: { id },
+    });
+
+    if (!contract) {
+      throw new NotFoundError(`Contract with id ${id} not found.`);
+    }
+
+    await prisma.contract.delete({
+      where: { id },
+    });
+
+    return reply.send({
+      success: true,
+      message: `Contract "${contract.title}" deleted successfully.`,
+      deletedId: id,
+    });
+  });
 }
+
