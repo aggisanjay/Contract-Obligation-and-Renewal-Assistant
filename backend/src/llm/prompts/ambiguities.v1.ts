@@ -11,19 +11,38 @@ export const ExtractedAmbiguitySchema = z.object({
   issueType: z
     .string()
     .nullish()
-    .transform((val) => {
-      const v = String(val || "").toLowerCase();
-      if (["unclear_term", "missing_data", "internal_contradiction", "policy_gap"].includes(v)) {
-        return v as any;
+    .transform(
+      (
+        val
+      ):
+        | "unclear_term"
+        | "missing_data"
+        | "internal_contradiction"
+        | "policy_gap" => {
+        const v = String(val || "").toLowerCase();
+        if (
+          v === "unclear_term" ||
+          v === "missing_data" ||
+          v === "internal_contradiction" ||
+          v === "policy_gap"
+        ) {
+          return v;
+        }
+        return "unclear_term";
       }
-      return "unclear_term";
+    ),
+  description: z
+    .union([z.string(), z.record(z.unknown()), z.number()])
+    .nullish()
+    .transform((v) => {
+      if (!v) return "Ambiguous or contradictory clause";
+      if (typeof v === "string") return v;
+      if (typeof v === "object") {
+        const obj = v as Record<string, unknown>;
+        return String(obj.description || obj.issue || obj.text || JSON.stringify(v));
+      }
+      return String(v);
     }),
-  description: z.any().transform((v) => {
-    if (!v) return "Ambiguous or contradictory clause";
-    if (typeof v === "string") return v;
-    if (typeof v === "object") return v.description || v.issue || v.text || JSON.stringify(v);
-    return String(v);
-  }),
   conflictingSectionLabel: z.string().nullish(),
   policyReference: z.string().nullish(),
   sourceSectionLabel: z.string().nullish().default("General"),

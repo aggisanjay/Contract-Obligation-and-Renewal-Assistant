@@ -45,7 +45,6 @@ Client shall pay monthly invoices within 30 days.
 
   afterAll(async () => {
     await app.close();
-    await prisma.$disconnect();
   });
 
   it("GET /api/dashboard - returns firm deadlines for approved items and notYetReviewed for pending items", async () => {

@@ -16,7 +16,6 @@ describe("Review Workflow API & Audit Log", () => {
 
   afterAll(async () => {
     await app.close();
-    await prisma.$disconnect();
   });
 
   it("POST /api/contracts/upload - uploads and extracts a contract", async () => {

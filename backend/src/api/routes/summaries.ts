@@ -1,4 +1,5 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
+import { ReviewStatus, ItemType, ExtractionStatus } from "@contract-assistant/shared";
 import { prisma } from "../../models/prisma.js";
 import { compileReviewedSummary } from "../../services/summaryCompiler.js";
 import { NotFoundError } from "../../utils/errors.js";
@@ -44,10 +45,10 @@ export async function summaryRoutes(app: FastifyInstance) {
           sourceSectionId: i.sourceSectionId,
           sourceSectionLabel: i.sourceSectionLabel,
           exactQuote: i.exactQuote,
-          reviewStatus: i.reviewStatus as any,
-          itemType: i.itemType as any,
-          status: i.status as any,
-          dateResolutionStatus: i.dateResolutionStatus as any,
+          reviewStatus: i.reviewStatus as ReviewStatus,
+          itemType: i.itemType as ItemType,
+          status: i.status as ExtractionStatus,
+          dateResolutionStatus: i.dateResolutionStatus as "resolved" | "needs_input" | "not_applicable",
           createdAt: i.createdAt.toISOString(),
           updatedAt: i.updatedAt.toISOString(),
         }))
@@ -119,10 +120,10 @@ export async function summaryRoutes(app: FastifyInstance) {
         sourceSectionId: i.sourceSectionId,
         sourceSectionLabel: i.sourceSectionLabel,
         exactQuote: i.exactQuote,
-        reviewStatus: i.reviewStatus as any,
-        itemType: i.itemType as any,
-        status: i.status as any,
-        dateResolutionStatus: i.dateResolutionStatus as any,
+        reviewStatus: i.reviewStatus as ReviewStatus,
+        itemType: i.itemType as ItemType,
+        status: i.status as ExtractionStatus,
+        dateResolutionStatus: i.dateResolutionStatus as "resolved" | "needs_input" | "not_applicable",
         createdAt: i.createdAt.toISOString(),
         updatedAt: i.updatedAt.toISOString(),
       }))

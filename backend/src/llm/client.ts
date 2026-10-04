@@ -13,7 +13,7 @@ export interface LLMClient {
   isMock(): boolean;
   generateStructured<T>(
     prompt: string,
-    schema: z.ZodType<T, any, any>,
+    schema: z.ZodType<T, z.ZodTypeDef, unknown>,
     systemInstruction?: string,
     options?: LLMGenerateOptions
   ): Promise<T>;
@@ -39,7 +39,7 @@ export class MockLLMClient implements LLMClient {
 
   async generateStructured<T>(
     prompt: string,
-    schema: z.ZodType<T, any, any>,
+    schema: z.ZodType<T, z.ZodTypeDef, unknown>,
     _systemInstruction?: string,
     options?: LLMGenerateOptions
   ): Promise<T> {
@@ -226,7 +226,7 @@ export function normalizeLLMOutput(data: unknown, stepName?: string): unknown {
 
   if (typeof data !== "object") return data;
 
-  const obj = { ...(data as Record<string, any>) };
+  const obj = { ...(data as Record<string, unknown>) };
 
   // 2. Unpack generic "items" or aliases
   if (Array.isArray(obj.items)) {
@@ -268,7 +268,19 @@ export function normalizeLLMOutput(data: unknown, stepName?: string): unknown {
 export class GeminiClient implements LLMClient {
   private apiKey: string;
   private modelName: string;
-  private aiInstance: any;
+  private aiInstance: {
+    models: {
+      generateContent: (args: {
+        model: string;
+        contents: string;
+        config?: {
+          systemInstruction?: string;
+          responseMimeType?: string;
+          temperature?: number;
+        };
+      }) => Promise<{ text?: string }>;
+    };
+  } | null = null;
 
   constructor(apiKey: string, modelName: string = "gemini-2.5-flash") {
     this.apiKey = apiKey;
@@ -282,14 +294,14 @@ export class GeminiClient implements LLMClient {
   private async getAI() {
     if (!this.aiInstance) {
       const { GoogleGenAI } = await import("@google/genai");
-      this.aiInstance = new GoogleGenAI({ apiKey: this.apiKey });
+      this.aiInstance = new GoogleGenAI({ apiKey: this.apiKey }) as unknown as typeof this.aiInstance;
     }
-    return this.aiInstance;
+    return this.aiInstance!;
   }
 
   async generateStructured<T>(
     prompt: string,
-    schema: z.ZodType<T, any, any>,
+    schema: z.ZodType<T, z.ZodTypeDef, unknown>,
     systemInstruction?: string,
     options?: LLMGenerateOptions
   ): Promise<T> {
@@ -361,7 +373,7 @@ export class GroqClient implements LLMClient {
 
   async generateStructured<T>(
     prompt: string,
-    schema: z.ZodType<T, any, any>,
+    schema: z.ZodType<T, z.ZodTypeDef, unknown>,
     systemInstruction?: string,
     options?: LLMGenerateOptions
   ): Promise<T> {
@@ -452,7 +464,7 @@ export class HuggingFaceClient implements LLMClient {
 
   async generateStructured<T>(
     prompt: string,
-    schema: z.ZodType<T, any, any>,
+    schema: z.ZodType<T, z.ZodTypeDef, unknown>,
     systemInstruction?: string,
     options?: LLMGenerateOptions
   ): Promise<T> {
@@ -549,7 +561,7 @@ export class FallbackChainLLMClient implements LLMClient {
 
   async generateStructured<T>(
     prompt: string,
-    schema: z.ZodType<T, any, any>,
+    schema: z.ZodType<T, z.ZodTypeDef, unknown>,
     systemInstruction?: string,
     options?: LLMGenerateOptions
   ): Promise<T> {
@@ -658,3 +670,22 @@ export function getLLMClient(): LLMClient {
 export function setLLMClient(client: LLMClient) {
   activeClient = client;
 }
+
+export function getLLMMode(): "gemini" | "groq" | "huggingface" | "mock" {
+  if (process.env.NODE_ENV === "test" || process.env.VITEST) {
+    return "mock";
+  }
+  const client = getLLMClient();
+  if (client.isMock()) return "mock";
+  if (client instanceof FallbackChainLLMClient) {
+    const first = client.getProviders()[0]?.name.toLowerCase();
+    if (first === "gemini") return "gemini";
+    if (first === "groq") return "groq";
+    if (first === "huggingface") return "huggingface";
+  }
+  if (process.env.GEMINI_API_KEY) return "gemini";
+  if (process.env.GROQ_API_KEY) return "groq";
+  if (process.env.HUGGINGFACE_API_KEY) return "huggingface";
+  return "mock";
+}
+

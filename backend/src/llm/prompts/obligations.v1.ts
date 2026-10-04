@@ -10,23 +10,37 @@ import { z } from "zod";
 export const ExtractedObligationsResponseSchema = z.object({
   obligations: z.array(
     z.object({
-      description: z.any().transform((v) => {
-        if (!v) return "Operational Obligation";
-        if (typeof v === "string") return v;
-        if (typeof v === "object") return v.description || v.title || v.text || JSON.stringify(v);
-        return String(v);
-      }),
+      description: z
+        .union([z.string(), z.record(z.unknown()), z.number()])
+        .nullish()
+        .transform((v) => {
+          if (!v) return "Operational Obligation";
+          if (typeof v === "string") return v;
+          if (typeof v === "object") {
+            const obj = v as Record<string, unknown>;
+            return String(obj.description || obj.title || obj.text || JSON.stringify(v));
+          }
+          return String(v);
+        }),
       responsibleParty: z.string().nullish().default("Contracting Party"),
       obligationType: z
         .string()
         .nullish()
-        .transform((val) => {
-          const v = String(val || "").toLowerCase();
-          if (["payment", "reporting", "delivery", "confidentiality", "compliance"].includes(v)) {
-            return v as any;
+        .transform(
+          (val): "payment" | "reporting" | "delivery" | "confidentiality" | "compliance" | "other" => {
+            const v = String(val || "").toLowerCase();
+            if (
+              v === "payment" ||
+              v === "reporting" ||
+              v === "delivery" ||
+              v === "confidentiality" ||
+              v === "compliance"
+            ) {
+              return v;
+            }
+            return "other";
           }
-          return "other";
-        }),
+        ),
       deadlineDate: z.string().nullish(),
       relativeDeadline: z.string().nullish(),
       recurrence: z

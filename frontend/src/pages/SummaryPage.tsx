@@ -2,6 +2,12 @@ import React, { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { getContractSummary, generateContractSummary, API_BASE } from "../services/api.js";
 import {
+  CompiledSummaryData,
+  SummaryParty,
+  SummaryObligation,
+  SummaryAmbiguity,
+} from "@contract-assistant/shared";
+import {
   Download,
   Printer,
   RefreshCw,
@@ -12,7 +18,7 @@ import {
 export const SummaryPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
 
-  const [compiled, setCompiled] = useState<any>(null);
+  const [compiled, setCompiled] = useState<CompiledSummaryData | null>(null);
   const [isOutdated, setIsOutdated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [regenerating, setRegenerating] = useState(false);
@@ -23,11 +29,12 @@ export const SummaryPage: React.FC = () => {
     try {
       setLoading(true);
       const res = await getContractSummary(id);
-      setCompiled((res as any).compiled);
-      setIsOutdated((res as any).isOutdated);
+      setCompiled(res.compiled);
+      setIsOutdated(res.isOutdated);
       setError(null);
-    } catch (err: any) {
-      setError(err.message || "Failed to load summary");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to load summary";
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -42,10 +49,11 @@ export const SummaryPage: React.FC = () => {
     try {
       setRegenerating(true);
       const res = await generateContractSummary(id);
-      setCompiled((res as any).compiled);
+      setCompiled(res.compiled);
       setIsOutdated(false);
-    } catch (err: any) {
-      alert("Failed to regenerate summary: " + err.message);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      alert("Failed to regenerate summary: " + msg);
     } finally {
       setRegenerating(false);
     }
@@ -165,7 +173,7 @@ export const SummaryPage: React.FC = () => {
             <p className="text-xs text-slate-400 italic">No approved parties recorded.</p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {compiled.parties.map((p: any, idx: number) => (
+              {compiled.parties.map((p: SummaryParty, idx: number) => (
                 <div key={idx} className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs">
                   <p className="font-bold text-slate-900 text-sm">{p.name}</p>
                   <p className="text-slate-600 mt-0.5">Role: {p.role}</p>
@@ -245,7 +253,7 @@ export const SummaryPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
-                  {compiled.obligations.map((o: any, idx: number) => (
+                  {compiled.obligations.map((o: SummaryObligation, idx: number) => (
                     <tr key={idx} className="hover:bg-slate-50">
                       <td className="p-3 font-semibold text-slate-800">{o.responsibleParty}</td>
                       <td className="p-3 text-slate-800">{o.description}</td>
@@ -269,7 +277,7 @@ export const SummaryPage: React.FC = () => {
             <p className="text-xs text-slate-400 italic">No open clarification questions.</p>
           ) : (
             <div className="space-y-2.5 text-xs">
-              {compiled.openQuestionsAndAmbiguities.map((q: any, idx: number) => (
+              {compiled.openQuestionsAndAmbiguities.map((q: SummaryAmbiguity, idx: number) => (
                 <div key={idx} className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
                   <p className="font-semibold text-slate-900">{q.description}</p>
                   <p className="text-slate-600 mt-1">

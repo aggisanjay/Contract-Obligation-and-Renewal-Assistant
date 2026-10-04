@@ -80,74 +80,257 @@ export const RecurrenceEnum = z.enum([
 ]);
 export type Recurrence = z.infer<typeof RecurrenceEnum>;
 
+export const RenewalTypeEnum = z.enum(["auto_renew", "manual_opt_in", "none"]);
+export type RenewalType = z.infer<typeof RenewalTypeEnum>;
+
+export const AmbiguityRiskLevelEnum = z.enum(["low", "medium", "high"]);
+export type AmbiguityRiskLevel = z.infer<typeof AmbiguityRiskLevelEnum>;
+
 // Structured payload variants for different item types
 export const PartyPayloadSchema = z.object({
-  name: z.string(),
-  role: z.string(), // e.g. "Vendor", "Client", "Licensee"
-  address: z.string().optional(),
-  jurisdiction: z.string().optional(),
+  name: z.string().min(1),
+  role: z.string().min(1), // e.g. "Vendor", "Client", "Licensee"
+  address: z.string().nullable().optional(),
+  jurisdiction: z.string().nullable().optional(),
 });
 
 export const EffectiveDatePayloadSchema = z.object({
   date: z.string().nullable(), // YYYY-MM-DD if absolute
   isRelative: z.boolean(),
-  relativeRule: z.string().optional(),
+  relativeRule: z.string().nullable().optional(),
 });
 
 export const TermExpiryPayloadSchema = z.object({
+  initialTerm: z.string().nullable().optional(),
   termLengthMonths: z.number().nullable().optional(),
   termLengthYears: z.number().nullable().optional(),
   expiryDate: z.string().nullable().optional(), // YYYY-MM-DD
   isPerpetual: z.boolean().default(false),
-  description: z.string(),
+  description: z.string().default(""),
 });
 
 export const RenewalPayloadSchema = z.object({
-  isAutoRenew: z.boolean(),
+  isAutoRenew: z.boolean().default(false),
+  renewalType: RenewalTypeEnum.default("none"),
   renewalTermMonths: z.number().nullable().optional(),
+  advanceNoticeDays: z.number().nullable().optional(),
   noticePeriodDays: z.number().nullable().optional(),
   noticePeriodMonths: z.number().nullable().optional(),
-  conditions: z.string().optional(),
+  noticeMethod: z.string().nullable().optional(),
+  conditions: z.string().nullable().optional(),
 });
 
 export const TerminationPayloadSchema = z.object({
-  forCauseAllowed: z.boolean(),
-  forConvenienceAllowed: z.boolean(),
+  forCauseAllowed: z.boolean().default(false),
+  forConvenienceAllowed: z.boolean().default(false),
   noticePeriodDays: z.number().nullable().optional(),
   curePeriodDays: z.number().nullable().optional(),
-  summary: z.string(),
+  summary: z.string().default(""),
 });
 
 export const NoticePayloadSchema = z.object({
   noticePeriodDays: z.number().nullable().optional(),
   noticePeriodMonths: z.number().nullable().optional(),
-  method: z.string().optional(), // e.g. "email", "certified mail"
-  recipient: z.string().optional(),
-  targetEvent: z.string().optional(), // e.g. "renewal", "termination", "material breach"
+  method: z.string().nullable().optional(), // e.g. "email", "certified mail"
+  recipient: z.string().nullable().optional(),
+  targetEvent: z.string().nullable().optional(), // e.g. "renewal", "termination", "material breach"
 });
 
 export const ObligationPayloadSchema = z.object({
-  description: z.string(),
-  responsibleParty: z.string(),
+  obligor: z.string().optional(),
+  obligee: z.string().nullable().optional(),
+  description: z.string().min(1),
+  responsibleParty: z.string().default("Contracting Party"),
   obligationType: ObligationTypeEnum,
+  frequency: RecurrenceEnum.default("one_time"),
   deadlineDate: z.string().nullable().optional(), // YYYY-MM-DD if fixed
   relativeDeadline: z.string().nullable().optional(), // e.g. "within 30 days of effective date"
   recurrence: RecurrenceEnum.default("one_time"),
-  recurrenceRule: z.string().optional(),
+  recurrenceRule: z.string().nullable().optional(),
 });
 
 export const AmbiguityConflictPayloadSchema = z.object({
+  clauseRef: z.string().optional(),
   issueType: z.enum(["unclear_term", "missing_data", "internal_contradiction", "policy_gap"]),
-  description: z.string(),
-  conflictingSectionLabel: z.string().optional(),
-  policyReference: z.string().optional(),
+  issueDescription: z.string().optional(),
+  description: z.string().min(1),
+  riskLevel: AmbiguityRiskLevelEnum.default("medium"),
+  conflictingSectionLabel: z.string().nullable().optional(),
+  policyReference: z.string().nullable().optional(),
 });
 
 export const ClarificationQuestionPayloadSchema = z.object({
-  question: z.string(),
-  targetClause: z.string(),
+  questionText: z.string().optional(),
+  question: z.string().min(1),
+  suggestedOptions: z.array(z.string()).default([]),
+  options: z.array(z.string()).optional(),
+  reasonNeeded: z.string().nullable().optional(),
+  targetClause: z.string().default("Contract clause"),
   userAnswer: z.string().nullable().optional(),
 });
+
+// ==========================================
+// STRICT 5-PASS PIPELINE OUTPUT SCHEMAS
+// ==========================================
+
+export const Pass1PartiesOutputSchema = z.object({
+  parties: z.array(
+    z.object({
+      name: z.string().min(1),
+      role: z.string().min(1),
+      address: z.string().nullable().optional(),
+      jurisdiction: z.string().nullable().optional(),
+      sourceSectionLabel: z.string().min(1),
+      exactQuote: z.string().min(1),
+      confidence: z.number().min(0).max(1),
+      status: ExtractionStatusEnum,
+      uncertaintyReason: z.string().nullable().optional(),
+    })
+  ),
+  effectiveDate: z
+    .object({
+      date: z.string().nullable().optional(),
+      isRelative: z.boolean(),
+      relativeRule: z.string().nullable().optional(),
+      sourceSectionLabel: z.string().min(1),
+      exactQuote: z.string().min(1),
+      confidence: z.number().min(0).max(1),
+      status: ExtractionStatusEnum,
+      uncertaintyReason: z.string().nullable().optional(),
+    })
+    .nullable()
+    .optional(),
+});
+export type Pass1PartiesOutput = z.infer<typeof Pass1PartiesOutputSchema>;
+
+export const Pass2TermRenewalOutputSchema = z.object({
+  term: z
+    .object({
+      initialTerm: z.string().nullable().optional(),
+      termLengthMonths: z.number().nullable().optional(),
+      termLengthYears: z.number().nullable().optional(),
+      expiryDate: z.string().nullable().optional(),
+      isPerpetual: z.boolean().default(false),
+      description: z.string().default(""),
+      sourceSectionLabel: z.string().default("General"),
+      exactQuote: z.string().default(""),
+      confidence: z.number().min(0).max(1).default(0.9),
+      status: ExtractionStatusEnum.default("confirmed"),
+      uncertaintyReason: z.string().nullable().optional(),
+    })
+    .nullable()
+    .optional(),
+  renewal: z
+    .object({
+      isAutoRenew: z.boolean().default(false),
+      renewalType: RenewalTypeEnum.default("none"),
+      renewalTermMonths: z.number().nullable().optional(),
+      advanceNoticeDays: z.number().nullable().optional(),
+      noticePeriodDays: z.number().nullable().optional(),
+      noticePeriodMonths: z.number().nullable().optional(),
+      noticeMethod: z.string().nullable().optional(),
+      conditions: z.string().nullable().optional(),
+      sourceSectionLabel: z.string().default("General"),
+      exactQuote: z.string().default(""),
+      confidence: z.number().min(0).max(1).default(0.9),
+      status: ExtractionStatusEnum.default("confirmed"),
+      uncertaintyReason: z.string().nullable().optional(),
+    })
+    .nullable()
+    .optional(),
+  termination: z
+    .object({
+      forCauseAllowed: z.boolean().default(false),
+      forConvenienceAllowed: z.boolean().default(false),
+      noticePeriodDays: z.number().nullable().optional(),
+      curePeriodDays: z.number().nullable().optional(),
+      summary: z.string().default(""),
+      sourceSectionLabel: z.string().default("General"),
+      exactQuote: z.string().default(""),
+      confidence: z.number().min(0).max(1).default(0.9),
+      status: ExtractionStatusEnum.default("confirmed"),
+      uncertaintyReason: z.string().nullable().optional(),
+    })
+    .nullable()
+    .optional(),
+  notice: z
+    .object({
+      noticePeriodDays: z.number().nullable().optional(),
+      noticePeriodMonths: z.number().nullable().optional(),
+      method: z.string().nullable().optional(),
+      recipient: z.string().nullable().optional(),
+      sourceSectionLabel: z.string().default("General"),
+      exactQuote: z.string().default(""),
+      confidence: z.number().min(0).max(1).default(0.9),
+      status: ExtractionStatusEnum.default("confirmed"),
+      uncertaintyReason: z.string().nullable().optional(),
+    })
+    .nullable()
+    .optional(),
+});
+export type Pass2TermRenewalOutput = z.infer<typeof Pass2TermRenewalOutputSchema>;
+
+export const Pass3ObligationsOutputSchema = z.object({
+  obligations: z.array(
+    z.object({
+      obligor: z.string().optional(),
+      obligee: z.string().nullable().optional(),
+      description: z.string().min(1),
+      responsibleParty: z.string().default("Contracting Party"),
+      obligationType: ObligationTypeEnum,
+      frequency: RecurrenceEnum.default("one_time"),
+      deadlineDate: z.string().nullable().optional(),
+      relativeDeadline: z.string().nullable().optional(),
+      recurrence: RecurrenceEnum.default("one_time"),
+      recurrenceRule: z.string().nullable().optional(),
+      sourceSectionLabel: z.string().default("General"),
+      exactQuote: z.string().default(""),
+      confidence: z.number().min(0).max(1).default(0.9),
+      status: ExtractionStatusEnum.default("confirmed"),
+      uncertaintyReason: z.string().nullable().optional(),
+    })
+  ),
+});
+export type Pass3ObligationsOutput = z.infer<typeof Pass3ObligationsOutputSchema>;
+
+export const Pass4AmbiguitiesOutputSchema = z.object({
+  ambiguitiesAndConflicts: z.array(
+    z.object({
+      clauseRef: z.string().optional(),
+      issueType: z.enum(["unclear_term", "missing_data", "internal_contradiction", "policy_gap"]),
+      issueDescription: z.string().optional(),
+      description: z.string().min(1),
+      riskLevel: AmbiguityRiskLevelEnum.default("medium"),
+      conflictingSectionLabel: z.string().nullable().optional(),
+      policyReference: z.string().nullable().optional(),
+      sourceSectionLabel: z.string().default("General"),
+      exactQuote: z.string().default(""),
+      confidence: z.number().min(0).max(1).default(0.85),
+      status: ExtractionStatusEnum.default("uncertain"),
+      uncertaintyReason: z.string().nullable().optional(),
+    })
+  ),
+});
+export type Pass4AmbiguitiesOutput = z.infer<typeof Pass4AmbiguitiesOutputSchema>;
+
+export const Pass5ClarificationsOutputSchema = z.object({
+  clarificationQuestions: z.array(
+    z.object({
+      questionText: z.string().optional(),
+      question: z.string().min(1),
+      suggestedOptions: z.array(z.string()).default([]),
+      options: z.array(z.string()).optional(),
+      reasonNeeded: z.string().nullable().optional(),
+      targetClause: z.string().default("Contract clause"),
+      sourceSectionLabel: z.string().default("General"),
+      exactQuote: z.string().default(""),
+      confidence: z.number().min(0).max(1).default(0.9),
+      status: ExtractionStatusEnum.default("uncertain"),
+      uncertaintyReason: z.string().nullable().optional(),
+    })
+  ),
+});
+export type Pass5ClarificationsOutput = z.infer<typeof Pass5ClarificationsOutputSchema>;
 
 // Union/Record representation for item payload
 export const ExtractedItemPayloadSchema = z.union([
@@ -321,6 +504,86 @@ function stringOrUnknown(): z.ZodType<string> {
 }
 
 export type ReviewedSummary = z.infer<typeof ReviewedSummarySchema>;
+
+export interface SummaryParty {
+  name: string;
+  role: string;
+  citation: string;
+}
+
+export interface SummaryObligation {
+  description: string;
+  responsibleParty: string;
+  type: string;
+  deadline: string | null;
+  recurrence: string;
+  citation: string;
+}
+
+export interface SummaryAmbiguity {
+  description: string;
+  userAnswer: string | null;
+  citation: string;
+}
+
+export interface CompiledSummaryData {
+  contractTitle: string;
+  versionNumber: number;
+  generatedAt: string;
+  disclaimer: string;
+  parties: SummaryParty[];
+  keyDates: {
+    effectiveDate: string | null;
+    expiryDate: string | null;
+    noticeDeadline: string | null;
+    citation: string;
+  };
+  renewalTerms: {
+    isAutoRenew: boolean;
+    summary: string;
+    citation: string;
+  };
+  terminationTerms: {
+    summary: string;
+    citation: string;
+  };
+  obligations: SummaryObligation[];
+  openQuestionsAndAmbiguities: SummaryAmbiguity[];
+  metrics: {
+    totalApproved: number;
+    totalRejected: number;
+    totalStale: number;
+  };
+  markdown: string;
+  html: string;
+}
+
+export interface DashboardDeadlineItem {
+  id: string;
+  contractId: string;
+  contractTitle: string;
+  itemType: string;
+  title: string;
+  deadlineDate: string; // YYYY-MM-DD
+  responsibleParty?: string | null;
+  urgency: "overdue" | "due_soon" | "upcoming";
+  daysRemaining: number;
+  reviewStatus: string;
+  sourceSectionLabel: string;
+  recurrence?: string | null;
+}
+
+export interface DashboardData {
+  today: string;
+  metrics: {
+    totalFirm: number;
+    overdueCount: number;
+    dueSoonCount: number;
+    notYetReviewedCount: number;
+  };
+  firmDeadlines: DashboardDeadlineItem[];
+  notYetReviewed: DashboardDeadlineItem[];
+}
 
 // ==========================================
 // 6. API REQUEST / RESPONSE SCHEMAS

@@ -49,22 +49,33 @@ jobs:
         env:
           DATABASE_URL: "postgresql://testuser:testpassword@localhost:5432/testdb?sslmode=disable"
 
+      - name: Run Linting
+        run: |
+          npm --workspace=shared run lint
+          npm --workspace=backend run lint
+          npm --workspace=frontend run lint
+
       - name: Typecheck Shared, Backend & Frontend
         run: |
           npm --workspace=shared run typecheck
           npm --workspace=backend run typecheck
           npm --workspace=frontend run typecheck
 
-      - name: Run Backend Tests (72 tests)
+      - name: Run Backend Tests
         run: npm --workspace=backend run test
         env:
           NODE_ENV: test
           DATABASE_URL: "postgresql://testuser:testpassword@localhost:5432/testdb?sslmode=disable"
 
-      - name: Run Frontend Tests (6 tests)
+      - name: Run Frontend Tests
         run: npm --workspace=frontend run test
 
       - name: Build Packages & Frontend Bundle
         run: |
           npm --workspace=shared run build
           npm --workspace=frontend run build
+
+      - name: Verify No Out-of-Sync / Uncommitted Changes After Build
+        run: |
+          git status --porcelain
+          test -z "$(git status --porcelain)"

@@ -14,6 +14,7 @@ import {
 } from "@contract-assistant/shared";
 import { NotFoundError, AppError } from "../../utils/errors.js";
 import { getLLMClient } from "../../llm/client.js";
+import { z } from "zod";
 
 export async function contractRoutes(app: FastifyInstance) {
   /**
@@ -58,7 +59,9 @@ export async function contractRoutes(app: FastifyInstance) {
         }
       }
     } else {
-      const body = req.body as any;
+      const body = req.body as
+        | { contractTitle?: string; contractText?: string; policyText?: string }
+        | undefined;
       contractTitle = body?.contractTitle || contractTitle;
       contractText = body?.contractText || "";
       policyText = body?.policyText || "";
@@ -144,18 +147,19 @@ export async function contractRoutes(app: FastifyInstance) {
     // 5. Compute Dates deterministically for extracted items
     // First find effective date and expiry items to use as anchors
     const effItem = pipelineResult.items.find((i) => i.itemType === "effective_date");
-    const effDate = (effItem?.originalPayload as any)?.date || null;
+    const effPayload = effItem?.originalPayload as Record<string, unknown> | null | undefined;
+    const effDate = typeof effPayload?.date === "string" ? effPayload.date : null;
 
     const termItem = pipelineResult.items.find((i) => i.itemType === "expiry");
-    const termPayload = (termItem?.originalPayload as any) || {};
+    const termPayload = (termItem?.originalPayload as Record<string, unknown> | null | undefined) || {};
 
     let computedExpiry: string | null = null;
     if (termItem) {
       const expRes = computeExpiryDate({
         effectiveDate: effDate || "",
-        termMonths: termPayload.termLengthMonths,
-        termYears: termPayload.termLengthYears,
-        exactExpiryDate: termPayload.expiryDate,
+        termMonths: typeof termPayload.termLengthMonths === "number" ? termPayload.termLengthMonths : null,
+        termYears: typeof termPayload.termLengthYears === "number" ? termPayload.termLengthYears : null,
+        exactExpiryDate: typeof termPayload.expiryDate === "string" ? termPayload.expiryDate : null,
       });
       if (expRes.status === "resolved") {
         computedExpiry = expRes.date;
@@ -181,12 +185,14 @@ export async function contractRoutes(app: FastifyInstance) {
             dateResolutionReason = "Could not compute expiry date without effective date and term duration.";
           }
         } else if (item.itemType === "renewal" || item.itemType === "notice") {
-          const payload = item.originalPayload as any;
-          if (computedExpiry && (payload.noticePeriodDays || payload.noticePeriodMonths)) {
+          const payload = (item.originalPayload as Record<string, unknown>) || {};
+          const noticeDays = typeof payload.noticePeriodDays === "number" ? payload.noticePeriodDays : null;
+          const noticeMonths = typeof payload.noticePeriodMonths === "number" ? payload.noticePeriodMonths : null;
+          if (computedExpiry && (noticeDays || noticeMonths)) {
             const notRes = computeNoticeDeadline({
               expiryDate: computedExpiry,
-              noticeDays: payload.noticePeriodDays,
-              noticeMonths: payload.noticePeriodMonths,
+              noticeDays,
+              noticeMonths,
             });
             if (notRes.status === "resolved") {
               calculatedDate = notRes.date;
@@ -194,12 +200,14 @@ export async function contractRoutes(app: FastifyInstance) {
             }
           }
         } else if (item.itemType === "obligation") {
-          const payload = item.originalPayload as any;
-          if (payload.deadlineDate) {
-            calculatedDate = payload.deadlineDate;
+          const payload = (item.originalPayload as Record<string, unknown>) || {};
+          const deadlineDate = typeof payload.deadlineDate === "string" ? payload.deadlineDate : null;
+          const relativeDeadline = typeof payload.relativeDeadline === "string" ? payload.relativeDeadline : null;
+          if (deadlineDate) {
+            calculatedDate = deadlineDate;
             dateResolutionStatus = "resolved";
-          } else if (payload.relativeDeadline) {
-            const relRes = resolveRelativeDeadline(payload.relativeDeadline, {
+          } else if (relativeDeadline) {
+            const relRes = resolveRelativeDeadline(relativeDeadline, {
               effectiveDate: effDate,
               expiryDate: computedExpiry,
             });
@@ -264,6 +272,8 @@ export async function contractRoutes(app: FastifyInstance) {
    */
   app.get("/api/contracts/:id", async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
+    const query = req.query as { version?: string };
+    const targetVersionNumber = query.version ? parseInt(query.version, 10) : undefined;
 
     const contract = await prisma.contract.findUnique({
       where: { id },
@@ -283,7 +293,10 @@ export async function contractRoutes(app: FastifyInstance) {
       throw new NotFoundError(`Contract with id ${id} not found.`);
     }
 
-    const latestVersion = contract.versions[0]!;
+    const activeVersion =
+      (targetVersionNumber !== undefined
+        ? contract.versions.find((v) => v.versionNumber === targetVersionNumber)
+        : null) || contract.versions[0]!;
 
     return reply.send({
       contract: {
@@ -294,14 +307,14 @@ export async function contractRoutes(app: FastifyInstance) {
         totalVersions: contract.versions.length,
       },
       activeVersion: {
-        id: latestVersion.id,
-        versionNumber: latestVersion.versionNumber,
-        fileType: latestVersion.fileType,
-        pageCount: latestVersion.pageCount,
-        createdAt: latestVersion.createdAt,
-        sections: latestVersion.sections,
-        extractedItems: latestVersion.extractedItems,
-        auditLogs: latestVersion.auditLogs,
+        id: activeVersion.id,
+        versionNumber: activeVersion.versionNumber,
+        fileType: activeVersion.fileType,
+        pageCount: activeVersion.pageCount,
+        createdAt: activeVersion.createdAt,
+        sections: activeVersion.sections,
+        extractedItems: activeVersion.extractedItems,
+        auditLogs: activeVersion.auditLogs,
       },
       allVersions: contract.versions.map((v) => ({
         id: v.id,
@@ -544,5 +557,102 @@ export async function contractRoutes(app: FastifyInstance) {
       deletedId: id,
     });
   });
+
+  /**
+   * Retry a single pipeline extraction pass without re-running the entire pipeline
+   */
+  app.post("/api/contracts/:id/extract/retry", async (req: FastifyRequest, reply: FastifyReply) => {
+    const { id } = req.params as { id: string };
+    const { step } = z
+      .object({
+        step: z.enum([
+          "parties_and_effective_date",
+          "term_and_renewal",
+          "obligations",
+          "ambiguities_and_conflicts",
+          "clarification_questions",
+        ]),
+      })
+      .parse(req.body);
+
+    const requestId = (req.id as string) || `retry-${Date.now()}`;
+
+    const contract = await prisma.contract.findUnique({
+      where: { id },
+      include: {
+        versions: {
+          orderBy: { versionNumber: "desc" },
+          include: {
+            sections: { orderBy: { sectionIndex: "asc" } },
+            extractedItems: true,
+          },
+        },
+      },
+    });
+
+    if (!contract) {
+      throw new NotFoundError(`Contract with id ${id} not found.`);
+    }
+
+    const activeVersion = contract.versions[0]!;
+
+    const pipelineResult = await runExtractionPipeline(
+      activeVersion.sections.map((s) => ({
+        id: s.id,
+        contractVersionId: s.contractVersionId,
+        sectionIndex: s.sectionIndex,
+        label: s.label,
+        heading: s.heading,
+        text: s.text,
+        page: s.page,
+        charStart: s.charStart,
+        charEnd: s.charEnd,
+        documentType: s.documentType as "contract" | "policy",
+      })),
+      activeVersion.policyText,
+      { requestId, onlyStep: step }
+    );
+
+    const createdItems = await Promise.all(
+      pipelineResult.items.map(async (item) => {
+        return prisma.extractedItem.create({
+          data: {
+            contractVersionId: activeVersion.id,
+            itemType: item.itemType,
+            status: item.status,
+            confidence: item.confidence,
+            uncertaintyReason: item.uncertaintyReason,
+            sourceSectionLabel: item.sourceSectionLabel,
+            sourceSectionId: item.sourceSectionId,
+            page: item.page,
+            exactQuote: item.exactQuote,
+            citationVerified: item.citationVerified,
+            citationWarning: item.citationWarning,
+            reviewStatus: "pending",
+            userEdited: false,
+            originalValue: JSON.stringify(item.originalPayload),
+            currentValue: JSON.stringify(item.originalPayload),
+          },
+        });
+      })
+    );
+
+    await prisma.auditLog.create({
+      data: {
+        contractVersionId: activeVersion.id,
+        actor: "user",
+        action: "step_retried",
+        note: `Retried pipeline step '${step}'. Extracted ${createdItems.length} items.`,
+      },
+    });
+
+    return reply.send({
+      success: true,
+      step,
+      addedCount: createdItems.length,
+      stepErrors: pipelineResult.stepErrors,
+    });
+  });
 }
+
 

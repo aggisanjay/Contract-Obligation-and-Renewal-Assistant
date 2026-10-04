@@ -8,12 +8,18 @@ import { z } from "zod";
  */
 
 export const ExtractedClarificationQuestionSchema = z.object({
-  question: z.any().transform((v) => {
-    if (!v) return "Clarification needed on clause";
-    if (typeof v === "string") return v;
-    if (typeof v === "object") return v.question || v.text || JSON.stringify(v);
-    return String(v);
-  }),
+  question: z
+    .union([z.string(), z.record(z.unknown()), z.number()])
+    .nullish()
+    .transform((v) => {
+      if (!v) return "Clarification needed on clause";
+      if (typeof v === "string") return v;
+      if (typeof v === "object") {
+        const obj = v as Record<string, unknown>;
+        return String(obj.question || obj.text || JSON.stringify(v));
+      }
+      return String(v);
+    }),
   targetClause: z.string().nullish().default("Contract clause"),
   sourceSectionLabel: z.string().nullish().default("General"),
   exactQuote: z.string().nullish().default(""),

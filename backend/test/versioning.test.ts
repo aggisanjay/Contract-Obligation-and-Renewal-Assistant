@@ -258,7 +258,6 @@ Client shall pay monthly invoices within thirty (30) days.
 
   afterAll(async () => {
     await app.close();
-    await prisma.$disconnect();
   });
 
   it("POST /api/contracts/:id/versions - uploads v2 without overwriting v1", async () => {

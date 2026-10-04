@@ -8,35 +8,37 @@ import { z } from "zod";
  * - Strictly forbids legal opinions on corporate standing or enforceability.
  */
 
+import { Pass1PartiesOutput } from "@contract-assistant/shared";
+
 export const ExtractedPartiesResponseSchema = z.object({
   parties: z.array(
     z.object({
-      name: z.string(),
-      role: z.string(),
+      name: z.string().default("Unnamed Party"),
+      role: z.string().default("Contracting Party"),
       address: z.string().nullish(),
       jurisdiction: z.string().nullish(),
-      sourceSectionLabel: z.string(),
-      exactQuote: z.string(),
-      confidence: z.number().min(0).max(1),
-      status: z.enum(["confirmed", "uncertain"]),
+      sourceSectionLabel: z.string().default("General"),
+      exactQuote: z.string().default(""),
+      confidence: z.number().min(0).max(1).default(0.9),
+      status: z.enum(["confirmed", "uncertain"]).default("confirmed"),
       uncertaintyReason: z.string().nullish(),
     })
-  ),
+  ).default([]),
   effectiveDate: z
     .object({
       date: z.string().nullish(), // YYYY-MM-DD or null if relative/unknown
-      isRelative: z.boolean(),
+      isRelative: z.boolean().default(false),
       relativeRule: z.string().nullish(),
-      sourceSectionLabel: z.string(),
-      exactQuote: z.string(),
-      confidence: z.number().min(0).max(1),
-      status: z.enum(["confirmed", "uncertain"]),
+      sourceSectionLabel: z.string().default("General"),
+      exactQuote: z.string().default(""),
+      confidence: z.number().min(0).max(1).default(0.9),
+      status: z.enum(["confirmed", "uncertain"]).default("confirmed"),
       uncertaintyReason: z.string().nullish(),
     })
     .nullish(),
 });
 
-export type ExtractedPartiesResponse = z.infer<typeof ExtractedPartiesResponseSchema>;
+export type ExtractedPartiesResponse = Pass1PartiesOutput;
 
 export function buildPartiesPrompt(sectionsText: string): string {
   return `

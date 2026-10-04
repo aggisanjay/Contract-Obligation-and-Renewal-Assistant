@@ -57,14 +57,23 @@ export async function dashboardRoutes(app: FastifyInstance) {
         const targetDate = item.manualDateOverride || item.calculatedDate;
         if (!targetDate) continue;
 
-        let payload: any = {};
+        let payload: Record<string, unknown> = {};
         try {
-          payload = JSON.parse(item.currentValue);
+          const parsed = JSON.parse(item.currentValue);
+          if (typeof parsed === "object" && parsed !== null) {
+            payload = parsed as Record<string, unknown>;
+          }
         } catch {
           payload = {};
         }
 
-        let itemTitle = payload.description || payload.summary || `${item.itemType} deadline`;
+        const payloadTitle =
+          typeof payload.description === "string"
+            ? payload.description
+            : typeof payload.summary === "string"
+            ? payload.summary
+            : "";
+        let itemTitle = payloadTitle || `${item.itemType} deadline`;
         if (item.itemType === "expiry") {
           itemTitle = `Contract Expiration / Term End`;
         } else if (item.itemType === "renewal") {
@@ -83,7 +92,8 @@ export async function dashboardRoutes(app: FastifyInstance) {
           urgency = "due_soon";
         }
 
-        const party = payload.responsibleParty || null;
+        const party = typeof payload.responsibleParty === "string" ? payload.responsibleParty : null;
+        const recurrence = typeof payload.recurrence === "string" ? payload.recurrence : null;
 
         // Filter by responsible party if requested
         if (
@@ -106,7 +116,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
           daysRemaining: daysDiff,
           reviewStatus: item.reviewStatus,
           sourceSectionLabel: item.sourceSectionLabel,
-          recurrence: payload.recurrence || null,
+          recurrence,
         };
 
         // RULE: Only APPROVED items appear as firm deadlines.

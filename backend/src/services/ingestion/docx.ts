@@ -21,10 +21,11 @@ export async function extractTextFromDocx(buffer: Buffer): Promise<DocxExtractio
     }
 
     return { fullText };
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (err instanceof IngestionError) throw err;
+    const msg = err instanceof Error ? err.message : "corrupted or unsupported format";
     throw new IngestionError(
-      `Failed to read DOCX file: ${err?.message || "corrupted or unsupported format"}`,
+      `Failed to read DOCX file: ${msg}`,
       "CORRUPTED_DOCX"
     );
   }

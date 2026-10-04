@@ -51,7 +51,7 @@ export async function versionRoutes(app: FastifyInstance) {
         }
       }
     } else {
-      const body = req.body as any;
+      const body = req.body as { contractText?: string } | undefined;
       contractText = body?.contractText || "";
     }
 

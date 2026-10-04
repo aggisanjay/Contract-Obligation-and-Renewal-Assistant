@@ -77,12 +77,19 @@ export function compileReviewedSummary(
   const staleItems = items.filter((i) => i.reviewStatus === "stale");
 
   // Helper to parse current value safely
-  function parseVal(item: ExtractedItem): any {
+  function parseVal(item: ExtractedItem): Record<string, unknown> {
     try {
-      return JSON.parse(item.currentValue);
+      const parsed = JSON.parse(item.currentValue);
+      return typeof parsed === "object" && parsed !== null
+        ? (parsed as Record<string, unknown>)
+        : { description: item.currentValue };
     } catch {
       return { description: item.currentValue };
     }
+  }
+
+  function str(val: unknown, fallback: string = ""): string {
+    return typeof val === "string" && val.trim().length > 0 ? val : fallback;
   }
 
   // 1. Parties
@@ -90,8 +97,8 @@ export function compileReviewedSummary(
   const parties: SummaryParty[] = partyItems.map((item) => {
     const val = parseVal(item);
     return {
-      name: val.name || "Unnamed Party",
-      role: val.role || "Party",
+      name: str(val.name, "Unnamed Party"),
+      role: str(val.role, "Party"),
       citation: `[${item.sourceSectionLabel}${item.page ? `, p.${item.page}` : ""}] "${item.exactQuote}"`,
     };
   });
@@ -99,11 +106,19 @@ export function compileReviewedSummary(
   // 2. Key Dates
   const effItem = approvedItems.find((i) => i.itemType === "effective_date");
   const effVal = effItem ? parseVal(effItem) : null;
-  const effectiveDate = effItem?.manualDateOverride || effItem?.calculatedDate || effVal?.date || null;
+  const effectiveDate =
+    effItem?.manualDateOverride ||
+    effItem?.calculatedDate ||
+    (effVal && str(effVal.date)) ||
+    null;
 
   const expItem = approvedItems.find((i) => i.itemType === "expiry");
   const expVal = expItem ? parseVal(expItem) : null;
-  const expiryDate = expItem?.manualDateOverride || expItem?.calculatedDate || expVal?.expiryDate || null;
+  const expiryDate =
+    expItem?.manualDateOverride ||
+    expItem?.calculatedDate ||
+    (expVal && str(expVal.expiryDate)) ||
+    null;
 
   const renewalNoticeItem = approvedItems.find(
     (i) => i.itemType === "renewal" || i.itemType === "notice"
@@ -127,7 +142,7 @@ export function compileReviewedSummary(
   const renewalTerms = {
     isAutoRenew: !!renewalVal?.isAutoRenew,
     summary:
-      renewalVal?.conditions ||
+      (renewalVal && str(renewalVal.conditions)) ||
       (renewalVal?.isAutoRenew
         ? `Automatically renews${renewalVal.renewalTermMonths ? ` for ${renewalVal.renewalTermMonths} months` : ""}. Notice required: ${renewalVal.noticePeriodDays || renewalVal.noticePeriodMonths || 30} days.`
         : "Does not auto-renew."),
@@ -141,7 +156,7 @@ export function compileReviewedSummary(
   const termVal = termItem ? parseVal(termItem) : null;
   const terminationTerms = {
     summary:
-      termVal?.summary ||
+      (termVal && str(termVal.summary)) ||
       (termVal?.forCauseAllowed ? "Termination for cause permitted." : "No explicit termination summary approved."),
     citation: termItem
       ? `[${termItem.sourceSectionLabel}${termItem.page ? `, p.${termItem.page}` : ""}] "${termItem.exactQuote}"`
@@ -153,11 +168,16 @@ export function compileReviewedSummary(
   const obligations: SummaryObligation[] = obligationItems.map((item) => {
     const val = parseVal(item);
     return {
-      description: val.description || item.currentValue,
-      responsibleParty: val.responsibleParty || "Unassigned",
-      type: val.obligationType || "other",
-      deadline: item.manualDateOverride || item.calculatedDate || val.deadlineDate || val.relativeDeadline || "Ongoing",
-      recurrence: val.recurrence || "one_time",
+      description: str(val.description, item.currentValue),
+      responsibleParty: str(val.responsibleParty, "Unassigned"),
+      type: str(val.obligationType, "other"),
+      deadline:
+        item.manualDateOverride ||
+        item.calculatedDate ||
+        str(val.deadlineDate) ||
+        str(val.relativeDeadline) ||
+        "Ongoing",
+      recurrence: str(val.recurrence, "one_time"),
       citation: `[${item.sourceSectionLabel}${item.page ? `, p.${item.page}` : ""}] "${item.exactQuote}"`,
     };
   });
@@ -169,8 +189,8 @@ export function compileReviewedSummary(
   const openQuestionsAndAmbiguities: SummaryAmbiguity[] = questionItems.map((item) => {
     const val = parseVal(item);
     return {
-      description: val.question || val.description || item.currentValue,
-      userAnswer: val.userAnswer || null,
+      description: str(val.question) || str(val.description, item.currentValue),
+      userAnswer: (val && str(val.userAnswer)) || null,
       citation: `[${item.sourceSectionLabel}] "${item.exactQuote}"`,
     };
   });

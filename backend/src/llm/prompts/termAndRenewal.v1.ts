@@ -14,12 +14,22 @@ export const ExtractedTermRenewalResponseSchema = z.object({
     .object({
       termLengthMonths: z.number().nullish(),
       termLengthYears: z.number().nullish(),
-      expiryDate: z.any().nullish().transform((val) => {
-        if (!val) return null;
-        if (typeof val === "string") return val;
-        if (typeof val === "object") return val.date || val.value || String(val);
-        return String(val);
-      }),
+      expiryDate: z
+        .union([z.string(), z.record(z.unknown()), z.number()])
+        .nullish()
+        .transform((val) => {
+          if (!val) return null;
+          if (typeof val === "string") return val;
+          if (typeof val === "object") {
+            const v = val as Record<string, unknown>;
+            return typeof v.date === "string"
+              ? v.date
+              : typeof v.value === "string"
+              ? v.value
+              : String(val);
+          }
+          return String(val);
+        }),
       isPerpetual: z.boolean().nullish().default(false),
       description: z.string().nullish().default(""),
       sourceSectionLabel: z.string().nullish().default("General"),

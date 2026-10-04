@@ -67,16 +67,20 @@ export function formatSectionsForPrompt(
   return combined;
 }
 
+export interface ExtractionPipelineOptions {
+  requestId?: string;
+  client?: LLMClient;
+  onlyStep?: string;
+}
+
 /**
  * Runs the 5-step extraction pipeline on contract sections.
+ * Supports running a single pass with onlyStep option.
  */
 export async function runExtractionPipeline(
   sections: DocumentSection[],
   policyText?: string | null,
-  options?: {
-    requestId?: string;
-    client?: LLMClient;
-  }
+  options?: ExtractionPipelineOptions
 ): Promise<PipelineExecutionResult> {
   const requestId = options?.requestId || `req-ext-${Date.now()}`;
   const client = options?.client || getLLMClient();
@@ -103,15 +107,16 @@ export async function runExtractionPipeline(
   // ----------------------------------------------------
   // STEP 1: Parties and Effective Date
   // ----------------------------------------------------
-  const startTimeStep1 = Date.now();
-  try {
-    const prompt = buildPartiesPrompt(promptContext);
-    const result = await client.generateStructured(
-      prompt,
-      ExtractedPartiesResponseSchema,
-      "You are a contract analysis assistant extracting parties and effective dates.",
-      { requestId, stepName: "parties_and_effective_date" }
-    );
+  if (!options?.onlyStep || options.onlyStep === "parties_and_effective_date") {
+    const startTimeStep1 = Date.now();
+    try {
+      const prompt = buildPartiesPrompt(promptContext);
+      const result = await client.generateStructured(
+        prompt,
+        ExtractedPartiesResponseSchema,
+        "You are a contract analysis assistant extracting parties and effective dates.",
+        { requestId, stepName: "parties_and_effective_date" }
+      );
 
     for (const party of result.parties) {
       const sec = findSection(party.sourceSectionLabel);
@@ -161,244 +166,253 @@ export async function runExtractionPipeline(
       error: msg,
     });
   }
+}
 
   // ----------------------------------------------------
   // STEP 2: Term, Expiry, Renewal, Termination & Notice
   // ----------------------------------------------------
-  const startTimeStep2 = Date.now();
-  try {
-    const prompt = buildTermRenewalPrompt(promptContext);
-    const result = await client.generateStructured(
-      prompt,
-      ExtractedTermRenewalResponseSchema,
-      "You are a contract analysis assistant extracting term, renewal, termination, and notice provisions.",
-      { requestId, stepName: "term_and_renewal" }
-    );
+  if (!options?.onlyStep || options.onlyStep === "term_and_renewal") {
+    const startTimeStep2 = Date.now();
+    try {
+      const prompt = buildTermRenewalPrompt(promptContext);
+      const result = await client.generateStructured(
+        prompt,
+        ExtractedTermRenewalResponseSchema,
+        "You are a contract analysis assistant extracting term, renewal, termination, and notice provisions.",
+        { requestId, stepName: "term_and_renewal" }
+      );
 
-    if (result.term) {
-      const sec = findSection(result.term.sourceSectionLabel || "General");
-      rawDrafts.push({
-        itemType: "expiry",
-        status: (result.term.status as "confirmed" | "uncertain") || "confirmed",
-        confidence: typeof result.term.confidence === "number" ? result.term.confidence : 0.9,
-        uncertaintyReason: result.term.uncertaintyReason || null,
-        sourceSectionLabel: result.term.sourceSectionLabel || "General",
-        sourceSectionId: sec?.id || null,
-        page: sec?.page || null,
-        exactQuote: result.term.exactQuote || "",
-        citationVerified: true,
-        citationWarning: null,
-        originalPayload: result.term,
+      if (result.term) {
+        const sec = findSection(result.term.sourceSectionLabel || "General");
+        rawDrafts.push({
+          itemType: "expiry",
+          status: (result.term.status as "confirmed" | "uncertain") || "confirmed",
+          confidence: typeof result.term.confidence === "number" ? result.term.confidence : 0.9,
+          uncertaintyReason: result.term.uncertaintyReason || null,
+          sourceSectionLabel: result.term.sourceSectionLabel || "General",
+          sourceSectionId: sec?.id || null,
+          page: sec?.page || null,
+          exactQuote: result.term.exactQuote || "",
+          citationVerified: true,
+          citationWarning: null,
+          originalPayload: result.term,
+        });
+      }
+
+      if (result.renewal) {
+        const sec = findSection(result.renewal.sourceSectionLabel || "General");
+        rawDrafts.push({
+          itemType: "renewal",
+          status: (result.renewal.status as "confirmed" | "uncertain") || "confirmed",
+          confidence: typeof result.renewal.confidence === "number" ? result.renewal.confidence : 0.9,
+          uncertaintyReason: result.renewal.uncertaintyReason || null,
+          sourceSectionLabel: result.renewal.sourceSectionLabel || "General",
+          sourceSectionId: sec?.id || null,
+          page: sec?.page || null,
+          exactQuote: result.renewal.exactQuote || "",
+          citationVerified: true,
+          citationWarning: null,
+          originalPayload: result.renewal,
+        });
+      }
+
+      if (result.termination) {
+        const sec = findSection(result.termination.sourceSectionLabel || "General");
+        rawDrafts.push({
+          itemType: "termination",
+          status: (result.termination.status as "confirmed" | "uncertain") || "confirmed",
+          confidence: typeof result.termination.confidence === "number" ? result.termination.confidence : 0.9,
+          uncertaintyReason: result.termination.uncertaintyReason || null,
+          sourceSectionLabel: result.termination.sourceSectionLabel || "General",
+          sourceSectionId: sec?.id || null,
+          page: sec?.page || null,
+          exactQuote: result.termination.exactQuote || "",
+          citationVerified: true,
+          citationWarning: null,
+          originalPayload: result.termination,
+        });
+      }
+
+      if (result.notice) {
+        const sec = findSection(result.notice.sourceSectionLabel || "General");
+        rawDrafts.push({
+          itemType: "notice",
+          status: (result.notice.status as "confirmed" | "uncertain") || "confirmed",
+          confidence: typeof result.notice.confidence === "number" ? result.notice.confidence : 0.9,
+          uncertaintyReason: result.notice.uncertaintyReason || null,
+          sourceSectionLabel: result.notice.sourceSectionLabel || "General",
+          sourceSectionId: sec?.id || null,
+          page: sec?.page || null,
+          exactQuote: result.notice.exactQuote || "",
+          citationVerified: true,
+          citationWarning: null,
+          originalPayload: result.notice,
+        });
+      }
+
+      logPipelineStep(requestId, "term_and_renewal", {
+        durationMs: Date.now() - startTimeStep2,
+        success: true,
+      });
+    } catch (err) {
+      const msg = (err as Error).message;
+      stepErrors.push({ step: "term_and_renewal", error: msg });
+      logPipelineStep(requestId, "term_and_renewal", {
+        durationMs: Date.now() - startTimeStep2,
+        success: false,
+        error: msg,
       });
     }
-
-    if (result.renewal) {
-      const sec = findSection(result.renewal.sourceSectionLabel || "General");
-      rawDrafts.push({
-        itemType: "renewal",
-        status: (result.renewal.status as "confirmed" | "uncertain") || "confirmed",
-        confidence: typeof result.renewal.confidence === "number" ? result.renewal.confidence : 0.9,
-        uncertaintyReason: result.renewal.uncertaintyReason || null,
-        sourceSectionLabel: result.renewal.sourceSectionLabel || "General",
-        sourceSectionId: sec?.id || null,
-        page: sec?.page || null,
-        exactQuote: result.renewal.exactQuote || "",
-        citationVerified: true,
-        citationWarning: null,
-        originalPayload: result.renewal,
-      });
-    }
-
-    if (result.termination) {
-      const sec = findSection(result.termination.sourceSectionLabel || "General");
-      rawDrafts.push({
-        itemType: "termination",
-        status: (result.termination.status as "confirmed" | "uncertain") || "confirmed",
-        confidence: typeof result.termination.confidence === "number" ? result.termination.confidence : 0.9,
-        uncertaintyReason: result.termination.uncertaintyReason || null,
-        sourceSectionLabel: result.termination.sourceSectionLabel || "General",
-        sourceSectionId: sec?.id || null,
-        page: sec?.page || null,
-        exactQuote: result.termination.exactQuote || "",
-        citationVerified: true,
-        citationWarning: null,
-        originalPayload: result.termination,
-      });
-    }
-
-    if (result.notice) {
-      const sec = findSection(result.notice.sourceSectionLabel || "General");
-      rawDrafts.push({
-        itemType: "notice",
-        status: (result.notice.status as "confirmed" | "uncertain") || "confirmed",
-        confidence: typeof result.notice.confidence === "number" ? result.notice.confidence : 0.9,
-        uncertaintyReason: result.notice.uncertaintyReason || null,
-        sourceSectionLabel: result.notice.sourceSectionLabel || "General",
-        sourceSectionId: sec?.id || null,
-        page: sec?.page || null,
-        exactQuote: result.notice.exactQuote || "",
-        citationVerified: true,
-        citationWarning: null,
-        originalPayload: result.notice,
-      });
-    }
-
-    logPipelineStep(requestId, "term_and_renewal", {
-      durationMs: Date.now() - startTimeStep2,
-      success: true,
-    });
-  } catch (err) {
-    const msg = (err as Error).message;
-    stepErrors.push({ step: "term_and_renewal", error: msg });
-    logPipelineStep(requestId, "term_and_renewal", {
-      durationMs: Date.now() - startTimeStep2,
-      success: false,
-      error: msg,
-    });
   }
 
   // ----------------------------------------------------
   // STEP 3: Obligations
   // ----------------------------------------------------
-  const startTimeStep3 = Date.now();
-  try {
-    const prompt = buildObligationsPrompt(promptContext);
-    const result = await client.generateStructured(
-      prompt,
-      ExtractedObligationsResponseSchema,
-      "You are a contract analysis assistant extracting obligations and deliverables.",
-      { requestId, stepName: "obligations" }
-    );
+  if (!options?.onlyStep || options.onlyStep === "obligations") {
+    const startTimeStep3 = Date.now();
+    try {
+      const prompt = buildObligationsPrompt(promptContext);
+      const result = await client.generateStructured(
+        prompt,
+        ExtractedObligationsResponseSchema,
+        "You are a contract analysis assistant extracting obligations and deliverables.",
+        { requestId, stepName: "obligations" }
+      );
 
-    const obligations = (result.obligations || []) as any[];
-    for (const ob of obligations) {
-      const sec = findSection(ob.sourceSectionLabel || "General");
-      rawDrafts.push({
-        itemType: "obligation",
-        status: (ob.status as "confirmed" | "uncertain") || "confirmed",
-        confidence: typeof ob.confidence === "number" ? ob.confidence : 0.9,
-        uncertaintyReason: ob.uncertaintyReason || null,
-        sourceSectionLabel: ob.sourceSectionLabel || "General",
-        sourceSectionId: sec?.id || null,
-        page: sec?.page || null,
-        exactQuote: ob.exactQuote || "",
-        citationVerified: true,
-        citationWarning: null,
-        originalPayload: ob,
+      const obligations = result.obligations || [];
+      for (const ob of obligations) {
+        const sec = findSection(ob.sourceSectionLabel || "General");
+        rawDrafts.push({
+          itemType: "obligation",
+          status: (ob.status as "confirmed" | "uncertain") || "confirmed",
+          confidence: typeof ob.confidence === "number" ? ob.confidence : 0.9,
+          uncertaintyReason: ob.uncertaintyReason || null,
+          sourceSectionLabel: ob.sourceSectionLabel || "General",
+          sourceSectionId: sec?.id || null,
+          page: sec?.page || null,
+          exactQuote: ob.exactQuote || "",
+          citationVerified: true,
+          citationWarning: null,
+          originalPayload: ob,
+        });
+      }
+
+      logPipelineStep(requestId, "obligations", {
+        durationMs: Date.now() - startTimeStep3,
+        success: true,
+        itemCount: obligations.length,
+      });
+    } catch (err) {
+      const msg = (err as Error).message;
+      stepErrors.push({ step: "obligations", error: msg });
+      logPipelineStep(requestId, "obligations", {
+        durationMs: Date.now() - startTimeStep3,
+        success: false,
+        error: msg,
       });
     }
-
-    logPipelineStep(requestId, "obligations", {
-      durationMs: Date.now() - startTimeStep3,
-      success: true,
-      itemCount: obligations.length,
-    });
-  } catch (err) {
-    const msg = (err as Error).message;
-    stepErrors.push({ step: "obligations", error: msg });
-    logPipelineStep(requestId, "obligations", {
-      durationMs: Date.now() - startTimeStep3,
-      success: false,
-      error: msg,
-    });
   }
 
   // ----------------------------------------------------
   // STEP 4: Ambiguities, Conflicts & Policy Gaps
   // ----------------------------------------------------
-  const startTimeStep4 = Date.now();
-  let ambiguitiesSummary = "";
-  try {
-    const prompt = buildAmbiguitiesPrompt(promptContext, policyText);
-    const result = await client.generateStructured(
-      prompt,
-      ExtractedAmbiguitiesResponseSchema,
-      "You are a contract analysis assistant identifying factual ambiguities and discrepancies.",
-      { requestId, stepName: "ambiguities_and_conflicts" }
-    );
+  if (!options?.onlyStep || options.onlyStep === "ambiguities_and_conflicts") {
+    const startTimeStep4 = Date.now();
+    let ambiguitiesSummary = "";
+    try {
+      const prompt = buildAmbiguitiesPrompt(promptContext, policyText);
+      const result = await client.generateStructured(
+        prompt,
+        ExtractedAmbiguitiesResponseSchema,
+        "You are a contract analysis assistant identifying factual ambiguities and discrepancies.",
+        { requestId, stepName: "ambiguities_and_conflicts" }
+      );
 
-    const ambiguities = (result.ambiguitiesAndConflicts || []) as any[];
-    for (const amb of ambiguities) {
-      const sec = findSection(amb.sourceSectionLabel || "General");
-      const isConflict = amb.issueType === "internal_contradiction" || amb.issueType === "policy_gap";
-      rawDrafts.push({
-        itemType: isConflict ? "conflict" : "ambiguity",
-        status: (amb.status as "confirmed" | "uncertain") || "uncertain",
-        confidence: typeof amb.confidence === "number" ? amb.confidence : 0.85,
-        uncertaintyReason: amb.uncertaintyReason || amb.description || null,
-        sourceSectionLabel: amb.sourceSectionLabel || "General",
-        sourceSectionId: sec?.id || null,
-        page: sec?.page || null,
-        exactQuote: amb.exactQuote || "",
-        citationVerified: true,
-        citationWarning: null,
-        originalPayload: amb,
+      const ambiguities = result.ambiguitiesAndConflicts || [];
+      for (const amb of ambiguities) {
+        const sec = findSection(amb.sourceSectionLabel || "General");
+        const isConflict = amb.issueType === "internal_contradiction" || amb.issueType === "policy_gap";
+        rawDrafts.push({
+          itemType: isConflict ? "conflict" : "ambiguity",
+          status: (amb.status as "confirmed" | "uncertain") || "uncertain",
+          confidence: typeof amb.confidence === "number" ? amb.confidence : 0.85,
+          uncertaintyReason: amb.uncertaintyReason || amb.description || null,
+          sourceSectionLabel: amb.sourceSectionLabel || "General",
+          sourceSectionId: sec?.id || null,
+          page: sec?.page || null,
+          exactQuote: amb.exactQuote || "",
+          citationVerified: true,
+          citationWarning: null,
+          originalPayload: amb,
+        });
+        ambiguitiesSummary += `- ${amb.issueType}: ${amb.description} (${amb.sourceSectionLabel})\n`;
+      }
+
+      logPipelineStep(requestId, "ambiguities_and_conflicts", {
+        durationMs: Date.now() - startTimeStep4,
+        success: true,
+        itemCount: ambiguities.length,
       });
-      ambiguitiesSummary += `- ${amb.issueType}: ${amb.description} (${amb.sourceSectionLabel})\n`;
+    } catch (err) {
+      const msg = (err as Error).message;
+      stepErrors.push({ step: "ambiguities_and_conflicts", error: msg });
+      logPipelineStep(requestId, "ambiguities_and_conflicts", {
+        durationMs: Date.now() - startTimeStep4,
+        success: false,
+        error: msg,
+      });
     }
-
-    logPipelineStep(requestId, "ambiguities_and_conflicts", {
-      durationMs: Date.now() - startTimeStep4,
-      success: true,
-      itemCount: ambiguities.length,
-    });
-  } catch (err) {
-    const msg = (err as Error).message;
-    stepErrors.push({ step: "ambiguities_and_conflicts", error: msg });
-    logPipelineStep(requestId, "ambiguities_and_conflicts", {
-      durationMs: Date.now() - startTimeStep4,
-      success: false,
-      error: msg,
-    });
   }
 
   // ----------------------------------------------------
   // STEP 5: Clarification Questions (Neutral & Non-Advisory)
   // ----------------------------------------------------
-  const startTimeStep5 = Date.now();
-  try {
-    const prompt = buildClarificationQuestionsPrompt(
-      promptContext,
-      ambiguitiesSummary || "Review any general open terms in the contract sections."
-    );
-    const result = await client.generateStructured(
-      prompt,
-      ExtractedClarificationQuestionsResponseSchema,
-      "You are a contract review assistant formulating neutral clarification questions.",
-      { requestId, stepName: "clarification_questions" }
-    );
+  if (!options?.onlyStep || options.onlyStep === "clarification_questions") {
+    const startTimeStep5 = Date.now();
+    try {
+      const prompt = buildClarificationQuestionsPrompt(
+        promptContext,
+        "Review any general open terms or ambiguities in the contract sections."
+      );
+      const result = await client.generateStructured(
+        prompt,
+        ExtractedClarificationQuestionsResponseSchema,
+        "You are a contract review assistant formulating neutral clarification questions.",
+        { requestId, stepName: "clarification_questions" }
+      );
 
-    const questions = (result.clarificationQuestions || []) as any[];
-    for (const cq of questions) {
-      const sec = findSection(cq.sourceSectionLabel || "General");
-      rawDrafts.push({
-        itemType: "clarification_question",
-        status: (cq.status as "confirmed" | "uncertain") || "uncertain",
-        confidence: typeof cq.confidence === "number" ? cq.confidence : 0.9,
-        uncertaintyReason: cq.uncertaintyReason || null,
-        sourceSectionLabel: cq.sourceSectionLabel || "General",
-        sourceSectionId: sec?.id || null,
-        page: sec?.page || null,
-        exactQuote: cq.exactQuote || "",
-        citationVerified: true,
-        citationWarning: null,
-        originalPayload: cq,
+      const questions = result.clarificationQuestions || [];
+      for (const cq of questions) {
+        const sec = findSection(cq.sourceSectionLabel || "General");
+        rawDrafts.push({
+          itemType: "clarification_question",
+          status: (cq.status as "confirmed" | "uncertain") || "uncertain",
+          confidence: typeof cq.confidence === "number" ? cq.confidence : 0.9,
+          uncertaintyReason: cq.uncertaintyReason || null,
+          sourceSectionLabel: cq.sourceSectionLabel || "General",
+          sourceSectionId: sec?.id || null,
+          page: sec?.page || null,
+          exactQuote: cq.exactQuote || "",
+          citationVerified: true,
+          citationWarning: null,
+          originalPayload: cq,
+        });
+      }
+
+      logPipelineStep(requestId, "clarification_questions", {
+        durationMs: Date.now() - startTimeStep5,
+        success: true,
+        itemCount: questions.length,
+      });
+    } catch (err) {
+      const msg = (err as Error).message;
+      stepErrors.push({ step: "clarification_questions", error: msg });
+      logPipelineStep(requestId, "clarification_questions", {
+        durationMs: Date.now() - startTimeStep5,
+        success: false,
+        error: msg,
       });
     }
-
-    logPipelineStep(requestId, "clarification_questions", {
-      durationMs: Date.now() - startTimeStep5,
-      success: true,
-      itemCount: questions.length,
-    });
-  } catch (err) {
-    const msg = (err as Error).message;
-    stepErrors.push({ step: "clarification_questions", error: msg });
-    logPipelineStep(requestId, "clarification_questions", {
-      durationMs: Date.now() - startTimeStep5,
-      success: false,
-      error: msg,
-    });
   }
 
   // ----------------------------------------------------

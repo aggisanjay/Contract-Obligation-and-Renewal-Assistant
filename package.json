@@ -10,10 +10,11 @@
   "scripts": {
     "dev:backend": "npm --workspace=backend run dev",
     "dev:frontend": "npm --workspace=frontend run dev",
-    "build": "npm --workspace=shared run build && npm --workspace=backend run build && npm --workspace=frontend run build",
-    "test": "npm --workspace=shared run test --if-present && npm --workspace=backend run test && npm --workspace=frontend run test --if-present",
-    "lint": "npm --workspace=backend run lint --if-present && npm --workspace=frontend run lint --if-present",
-    "typecheck": "npm --workspace=shared run build && npm --workspace=shared run typecheck && npm --workspace=backend run typecheck && npm --workspace=frontend run typecheck"
+    "build": "node scripts/build.mjs",
+    "start": "npx prisma db push --schema=backend/prisma/schema.prisma --accept-data-loss && node backend/dist/index.js",
+    "test": "node scripts/run-all.mjs \"npm --workspace=shared run test --if-present\" \"npm --workspace=backend run test\" \"npm --workspace=frontend run test --if-present\"",
+    "lint": "node scripts/lint.mjs",
+    "typecheck": "node scripts/typecheck.mjs"
   },
   "devDependencies": {
     "prettier": "^3.5.0"

@@ -6,8 +6,26 @@ import {
   bulkApproveItems,
   getAuditLog,
   deleteContract,
+  resolveStaleItem,
+  retryExtractionStep,
   ContractDetailsResponse,
 } from "../services/api.js";
+import { UploadVersionModal } from "../components/UploadVersionModal.js";
+import { VersionDiffModal } from "../components/VersionDiffModal.js";
+
+interface ParsedItemPayload {
+  name?: string;
+  role?: string;
+  effectiveDate?: string;
+  expirationDate?: string;
+  description?: string;
+  obligor?: string;
+  question?: string;
+  options?: string[];
+  userAnswer?: string;
+  text?: string;
+  [key: string]: unknown;
+}
 import { ExtractedItem, AuditLog } from "@contract-assistant/shared";
 import {
   CheckCircle,
@@ -22,6 +40,9 @@ import {
   Sparkles,
   Trash2,
   X,
+  Upload,
+  Split,
+  RefreshCw,
 } from "lucide-react";
 
 export const ReviewPage: React.FC = () => {
@@ -37,6 +58,13 @@ export const ReviewPage: React.FC = () => {
 
   // Category filter for right pane
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+
+  // Versioning state
+  const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
+  const [showUploadVersionModal, setShowUploadVersionModal] = useState(false);
+  const [showDiffModal, setShowDiffModal] = useState(false);
+  const [staleNotes, setStaleNotes] = useState<Record<string, string>>({});
+  const [resolvingStaleId, setResolvingStaleId] = useState<string | null>(null);
 
   // Audit log modal state
   const [showAuditModal, setShowAuditModal] = useState(false);
@@ -62,12 +90,13 @@ export const ReviewPage: React.FC = () => {
 
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
 
-  const loadData = async () => {
+  const loadData = async (targetVersion?: number) => {
     if (!id) return;
     try {
       setLoading(true);
-      const res = await getContract(id);
+      const res = await getContract(id, targetVersion);
       setData(res);
+      setSelectedVersion(res.activeVersion.versionNumber);
       setError(null);
     } catch (err: any) {
       setError(err.message || "Failed to load contract");
@@ -95,13 +124,55 @@ export const ReviewPage: React.FC = () => {
   const handleApprove = async (item: ExtractedItem) => {
     if (!id) return;
     await reviewItem(id, item.id, "approve");
-    loadData();
+    loadData(selectedVersion || undefined);
   };
 
   const handleReject = async (item: ExtractedItem) => {
     if (!id) return;
     await reviewItem(id, item.id, "reject");
-    loadData();
+    loadData(selectedVersion || undefined);
+  };
+
+  const handleResolveStale = async (itemId: string, action: "reconfirm" | "dismiss") => {
+    if (!id) return;
+    try {
+      setResolvingStaleId(itemId);
+      const note = staleNotes[itemId] || "";
+      await resolveStaleItem(id, itemId, action, note);
+      setStaleNotes((prev) => {
+        const next = { ...prev };
+        delete next[itemId];
+        return next;
+      });
+      loadData(selectedVersion || undefined);
+    } catch (err: any) {
+      alert(err?.message || "Failed to resolve stale item");
+    } finally {
+      setResolvingStaleId(null);
+    }
+  };
+
+  const STEP_ID_MAP: Record<string, string> = {
+    parties: "parties_and_effective_date",
+    term: "term_and_renewal",
+    obligations: "obligations",
+    ambiguities: "ambiguities_and_conflicts",
+    questions: "clarification_questions",
+  };
+
+  const [isRetryingStep, setIsRetryingStep] = useState(false);
+
+  const handleRetryCategoryStep = async (stepName: string) => {
+    if (!id) return;
+    try {
+      setIsRetryingStep(true);
+      await retryExtractionStep(id, stepName);
+      await loadData(selectedVersion || undefined);
+    } catch (err: any) {
+      alert(err?.message || `Failed to retry step ${stepName}`);
+    } finally {
+      setIsRetryingStep(false);
+    }
   };
 
   const startEdit = (item: ExtractedItem) => {
@@ -114,7 +185,7 @@ export const ReviewPage: React.FC = () => {
     if (!id) return;
     await reviewItem(id, item.id, "edit", editText, editNote);
     setEditingItemId(null);
-    loadData();
+    loadData(selectedVersion || undefined);
   };
 
   const saveQuestionAnswer = async (item: ExtractedItem) => {
@@ -122,7 +193,7 @@ export const ReviewPage: React.FC = () => {
     await reviewItem(id, item.id, "answer_question", questionAnswer);
     setAnsweringQuestionId(null);
     setQuestionAnswer("");
-    loadData();
+    loadData(selectedVersion || undefined);
   };
 
   const saveDateOverride = async (item: ExtractedItem) => {
@@ -130,25 +201,23 @@ export const ReviewPage: React.FC = () => {
     await reviewItem(id, item.id, "override_date", newDateVal);
     setOverridingDateId(null);
     setNewDateVal("");
-    loadData();
+    loadData(selectedVersion || undefined);
   };
 
   const handleBulkApprove = async () => {
     if (!id || !data) return;
     // Only approved verified + confirmed items
     const eligibleItems = data.activeVersion.extractedItems.filter(
-      (i) =>
-        i.reviewStatus === "pending" &&
-        i.status === "confirmed" &&
-        i.citationVerified
+      (i) => i.reviewStatus === "pending" && i.status === "confirmed" && i.citationVerified
     );
+
     if (eligibleItems.length === 0) return;
 
     await bulkApproveItems(
       id,
       eligibleItems.map((i) => i.id)
     );
-    loadData();
+    loadData(selectedVersion || undefined);
   };
 
   const viewAuditLog = async () => {
@@ -202,11 +271,19 @@ export const ReviewPage: React.FC = () => {
 
   const { contract, activeVersion } = data;
   const items = activeVersion.extractedItems;
+  const staleItems = items.filter((i) => i.reviewStatus === "stale");
 
   const filteredItems = items.filter((item) => {
     if (categoryFilter === "all") return true;
+    if (categoryFilter === "stale") return item.reviewStatus === "stale";
     if (categoryFilter === "parties") return item.itemType === "party" || item.itemType === "effective_date";
-    if (categoryFilter === "term") return item.itemType === "expiry" || item.itemType === "renewal" || item.itemType === "termination" || item.itemType === "notice";
+    if (categoryFilter === "term")
+      return (
+        item.itemType === "expiry" ||
+        item.itemType === "renewal" ||
+        item.itemType === "termination" ||
+        item.itemType === "notice"
+      );
     if (categoryFilter === "obligations") return item.itemType === "obligation";
     if (categoryFilter === "ambiguities") return item.itemType === "ambiguity" || item.itemType === "conflict";
     if (categoryFilter === "questions") return item.itemType === "clarification_question";
@@ -223,23 +300,68 @@ export const ReviewPage: React.FC = () => {
       {/* Top Contract Action Bar */}
       <div className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between shadow-2xs">
         <div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-3">
             <h1 className="text-lg font-bold text-slate-900">{contract.title}</h1>
-            <span className="px-2 py-0.5 text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200 rounded-md">
-              v{activeVersion.versionNumber}
-            </span>
-            {activeVersion.pageCount && (
-              <span className="text-xs text-slate-400">
-                ({activeVersion.pageCount} pages)
+
+            {/* Version Switcher Dropdown */}
+            <div className="flex items-center space-x-1.5">
+              <label htmlFor="versionSelect" className="text-xs text-slate-400 font-medium">
+                Version:
+              </label>
+              <select
+                id="versionSelect"
+                value={activeVersion.versionNumber}
+                onChange={(e) => loadData(parseInt(e.target.value, 10))}
+                className="px-2.5 py-1 text-xs font-bold bg-slate-100 text-slate-800 border border-slate-300 rounded-md hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500 cursor-pointer"
+              >
+                {data.allVersions.map((v) => (
+                  <option key={v.id} value={v.versionNumber}>
+                    v{v.versionNumber} {v.versionNumber === contract.totalVersions ? "(Latest)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {activeVersion.versionNumber < contract.totalVersions && (
+              <span className="px-2 py-0.5 text-[11px] font-semibold bg-amber-100 text-amber-800 border border-amber-300 rounded">
+                Viewing Historical v{activeVersion.versionNumber}
               </span>
             )}
+
+            {activeVersion.pageCount && (
+              <span className="text-xs text-slate-400">({activeVersion.pageCount} pages)</span>
+            )}
           </div>
+
           <p className="text-xs text-slate-500 mt-0.5">
-            {pendingCount} items pending review - {items.length} total extracted
+            {pendingCount} items pending review &bull; {items.length} total in v{activeVersion.versionNumber}
+            {contract.totalVersions > 1 && ` &bull; ${contract.totalVersions} total versions`}
           </p>
         </div>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-2.5">
+          {/* Upload New Version Button */}
+          <button
+            onClick={() => setShowUploadVersionModal(true)}
+            className="inline-flex items-center px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs"
+            title="Upload an updated version of this contract (v2, v3, etc.)"
+          >
+            <Upload className="w-3.5 h-3.5 mr-1.5 text-slate-500" />
+            Upload New Version
+          </button>
+
+          {/* Compare Versions Button (if >= 2 versions) */}
+          {contract.totalVersions >= 2 && (
+            <button
+              onClick={() => setShowDiffModal(true)}
+              className="inline-flex items-center px-3 py-1.5 border border-indigo-200 bg-indigo-50/70 text-indigo-700 rounded-lg text-xs font-semibold hover:bg-indigo-100 transition-colors shadow-2xs"
+              title="Compare section-by-section diffs between versions"
+            >
+              <Split className="w-3.5 h-3.5 mr-1.5 text-indigo-600" />
+              Compare Versions
+            </button>
+          )}
+
           <button
             onClick={viewAuditLog}
             className="inline-flex items-center px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs"
@@ -281,17 +403,38 @@ export const ReviewPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Stale Items Banner (High Priority Alert) */}
+      {staleItems.length > 0 && (
+        <div className="bg-amber-500 text-white px-6 py-2.5 flex items-center justify-between text-xs shadow-xs shrink-0 animate-in fade-in duration-200">
+          <div className="flex items-center space-x-2">
+            <AlertTriangle className="w-4 h-4 text-amber-100 shrink-0" />
+            <span className="font-semibold">
+              Stale Clause Alert: {staleItems.length} item{staleItems.length > 1 ? "s" : ""} from prior version{" "}
+              {staleItems.length > 1 ? "have" : "has"} modified or missing underlying clauses in v
+              {activeVersion.versionNumber}.
+            </span>
+            <span className="text-amber-100 text-[11px] hidden md:inline">
+              Re-confirm or dismiss these items before compiling the contract summary.
+            </span>
+          </div>
+          <button
+            onClick={() => setCategoryFilter("stale")}
+            className="px-3 py-1 bg-white text-amber-900 font-bold rounded-md hover:bg-amber-50 transition-colors shadow-2xs text-[11px]"
+          >
+            Review Stale Items ({staleItems.length})
+          </button>
+        </div>
+      )}
+
       {/* Main Split Screen */}
       <div className="flex-1 grid grid-cols-12 min-h-0 overflow-hidden">
         {/* Left Pane: Contract Sections */}
         <div className="col-span-6 border-r border-slate-200 bg-white overflow-y-auto p-6 space-y-6">
           <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-2">
             <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-              Document Text & Sections
+              Document Text & Sections (v{activeVersion.versionNumber})
             </h2>
-            <span className="text-xs text-slate-500">
-              {activeVersion.sections.length} parsed clauses
-            </span>
+            <span className="text-xs text-slate-500">{activeVersion.sections.length} parsed clauses</span>
           </div>
 
           {activeVersion.sections.map((section) => {
@@ -299,33 +442,28 @@ export const ReviewPage: React.FC = () => {
             return (
               <div
                 key={section.id}
-                ref={(el) => (sectionRefs.current[section.label] = el)}
+                ref={(el) => {
+                  sectionRefs.current[section.label] = el;
+                }}
                 className={`p-4 rounded-xl border transition-all ${
                   isHighlighted
-                    ? "border-amber-400 bg-amber-50/60 shadow-md ring-2 ring-amber-300 citation-target-highlight"
-                    : "border-slate-200 bg-slate-50/50 hover:bg-white hover:border-slate-300"
+                    ? "bg-amber-50 border-amber-400 ring-2 ring-amber-300"
+                    : "bg-slate-50 border-slate-200 hover:border-slate-300"
                 }`}
               >
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center space-x-2">
-                    <span className="px-2 py-0.5 rounded text-xs font-bold bg-slate-200 text-slate-800">
-                      {section.label}
-                    </span>
-                    {section.heading && (
-                      <span className="text-xs font-semibold text-slate-700">
-                        {section.heading}
-                      </span>
-                    )}
-                  </div>
+                <div className="flex items-center justify-between text-xs text-slate-500 mb-1.5">
+                  <span className="font-bold text-slate-800">
+                    {section.label} {section.heading ? `- ${section.heading}` : ""}
+                  </span>
                   {section.page && (
-                    <span className="text-xs text-slate-400 font-mono">
+                    <span className="bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded text-[10px]">
                       Page {section.page}
                     </span>
                   )}
                 </div>
-                <div className="text-sm text-slate-800 font-mono whitespace-pre-wrap leading-relaxed select-text">
+                <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed font-mono">
                   {section.text}
-                </div>
+                </p>
               </div>
             );
           })}
@@ -337,18 +475,25 @@ export const ReviewPage: React.FC = () => {
           <div className="flex items-center space-x-1.5 pb-4 border-b border-slate-200 mb-4 overflow-x-auto shrink-0">
             {[
               { id: "all", label: `All (${items.length})` },
+              ...(staleItems.length > 0
+                ? [{ id: "stale", label: `⚠️ Stale / Changed (${staleItems.length})`, isAlert: true }]
+                : []),
               { id: "parties", label: "Parties & Dates" },
               { id: "term", label: "Term & Renewal" },
               { id: "obligations", label: "Obligations" },
               { id: "ambiguities", label: "Ambiguities" },
               { id: "questions", label: "Clarifications" },
-            ].map((cat) => (
+            ].map((cat: { id: string; label: string; isAlert?: boolean }) => (
               <button
                 key={cat.id}
                 onClick={() => setCategoryFilter(cat.id)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
                   categoryFilter === cat.id
-                    ? "bg-sky-600 text-white shadow-2xs font-semibold"
+                    ? cat.isAlert
+                      ? "bg-amber-600 text-white shadow-2xs font-semibold"
+                      : "bg-sky-600 text-white shadow-2xs font-semibold"
+                    : cat.isAlert
+                    ? "bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200 font-semibold"
                     : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
                 }`}
               >
@@ -360,18 +505,46 @@ export const ReviewPage: React.FC = () => {
           {/* Items List */}
           <div className="space-y-4 flex-1">
             {filteredItems.length === 0 ? (
-              <div className="text-center py-12 text-slate-400 text-sm">
-                No items match this category.
+              <div className="text-center py-12 text-slate-500 text-sm bg-white rounded-xl border border-slate-200 p-8 shadow-2xs">
+                <p className="font-semibold text-slate-700">No items found in this category.</p>
+                <p className="text-xs text-slate-400 mt-1 mb-4">
+                  You can retry the targeted extraction pass for this category without re-running the entire contract.
+                </p>
+                {categoryFilter in STEP_ID_MAP && (
+                  <button
+                    onClick={() => handleRetryCategoryStep(STEP_ID_MAP[categoryFilter])}
+                    disabled={isRetryingStep}
+                    className="inline-flex items-center px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors disabled:opacity-50"
+                  >
+                    {isRetryingStep ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin mr-1.5" />
+                        Running Extraction Pass...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+                        Retry Pass: {categoryFilter.replace("_", " ")}
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             ) : (
               filteredItems.map((item) => {
                 const isEditing = editingItemId === item.id;
                 const isOverridingDate = overridingDateId === item.id;
                 const isAnsweringQuestion = answeringQuestionId === item.id;
+                const isStale = item.reviewStatus === "stale";
 
-                let parsedVal: any = {};
+                let parsedVal: ParsedItemPayload = {};
                 try {
-                  parsedVal = JSON.parse(item.currentValue);
+                  const parsed = JSON.parse(item.currentValue);
+                  if (typeof parsed === "object" && parsed !== null) {
+                    parsedVal = parsed as ParsedItemPayload;
+                  } else {
+                    parsedVal = { text: item.currentValue };
+                  }
                 } catch {
                   parsedVal = { text: item.currentValue };
                 }
@@ -379,7 +552,9 @@ export const ReviewPage: React.FC = () => {
                 return (
                   <div
                     key={item.id}
-                    className="bg-white rounded-xl border border-slate-200 shadow-2xs p-5 transition-shadow hover:shadow-xs"
+                    className={`bg-white rounded-xl border shadow-2xs p-5 transition-shadow hover:shadow-xs ${
+                      isStale ? "border-amber-300 bg-amber-50/20" : "border-slate-200"
+                    }`}
                   >
                     {/* Item Header */}
                     <div className="flex items-start justify-between">
@@ -400,6 +575,12 @@ export const ReviewPage: React.FC = () => {
                         )}
 
                         {/* Review Status Badge */}
+                        {item.reviewStatus === "stale" && (
+                          <span className="px-2 py-0.5 text-xs rounded bg-amber-100 text-amber-800 border border-amber-300 font-bold flex items-center">
+                            <AlertTriangle className="w-3 h-3 mr-1 text-amber-600" />
+                            Stale - Action Required
+                          </span>
+                        )}
                         {item.reviewStatus === "approved" && (
                           <span className="px-2 py-0.5 text-xs rounded bg-sky-50 text-sky-700 border border-sky-200 font-medium">
                             Approved
@@ -429,8 +610,33 @@ export const ReviewPage: React.FC = () => {
                       </button>
                     </div>
 
+                    {/* Stale Clause Banner within Card */}
+                    {isStale && (
+                      <div className="mt-3 p-3 bg-amber-50 border border-amber-300 rounded-lg text-xs text-amber-900 space-y-1.5">
+                        <div className="font-bold flex items-center text-amber-800">
+                          <AlertTriangle className="w-3.5 h-3.5 mr-1.5 text-amber-600" />
+                          Clause Modified in New Version:{" "}
+                          <span className="ml-1 font-normal font-mono">{item.staleReason || "clause changed"}</span>
+                        </div>
+                        <p className="text-[11px] text-amber-700">
+                          This obligation or deadline was approved in prior version, but the text of its underlying section changed. Please re-confirm if the item still applies or dismiss it.
+                        </p>
+                        <div className="pt-1">
+                          <input
+                            type="text"
+                            value={staleNotes[item.id] || ""}
+                            onChange={(e) =>
+                              setStaleNotes((prev) => ({ ...prev, [item.id]: e.target.value }))
+                            }
+                            placeholder="Optional audit rationale (e.g. verified still applies under Section 2.1)..."
+                            className="w-full text-xs p-2 bg-white border border-amber-300 rounded-md focus:outline-none focus:ring-1 focus:ring-amber-500 font-sans"
+                          />
+                        </div>
+                      </div>
+                    )}
+
                     {/* Citation Warnings */}
-                    {!item.citationVerified && (
+                    {!item.citationVerified && !isStale && (
                       <div className="mt-2.5 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 flex items-start space-x-2">
                         <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                         <div>
@@ -440,159 +646,169 @@ export const ReviewPage: React.FC = () => {
                       </div>
                     )}
 
-                    {/* Uncertainty Reason */}
-                    {item.uncertaintyReason && (
-                      <p className="mt-2 text-xs text-amber-800 italic">
-                        Reason: {item.uncertaintyReason}
-                      </p>
-                    )}
+                    {/* Verbatim Source Quote */}
+                    <div className="mt-3 bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                        Exact Verbatim Quote
+                      </span>
+                      <p className="font-mono text-slate-800 italic">"{item.exactQuote}"</p>
+                    </div>
 
-                    {/* Content Display / Inline Edit */}
-                    <div className="mt-3 text-sm text-slate-800">
+                    {/* Item Value Content */}
+                    <div className="mt-3">
                       {isEditing ? (
-                        <div className="space-y-2 mt-2">
+                        <div className="space-y-2">
                           <textarea
                             rows={3}
                             value={editText}
                             onChange={(e) => setEditText(e.target.value)}
-                            className="w-full p-2 border border-slate-300 rounded-md text-xs font-mono focus:ring-2 focus:ring-sky-500"
+                            className="w-full text-xs font-mono p-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-sky-500 focus:outline-none"
                           />
                           <input
                             type="text"
-                            placeholder="Optional note describing your edit..."
+                            placeholder="Reason for change (recorded in audit log)..."
                             value={editNote}
                             onChange={(e) => setEditNote(e.target.value)}
-                            className="w-full px-2.5 py-1.5 border border-slate-300 rounded-md text-xs"
+                            className="w-full text-xs p-2 border border-slate-300 rounded-lg"
                           />
-                          <div className="flex space-x-2 justify-end">
+                          <div className="flex justify-end space-x-2">
                             <button
                               onClick={() => setEditingItemId(null)}
-                              className="px-2.5 py-1 border border-slate-300 rounded text-xs text-slate-600"
+                              className="px-3 py-1 border border-slate-300 rounded text-xs text-slate-600 hover:bg-slate-50"
                             >
                               Cancel
                             </button>
                             <button
                               onClick={() => saveEdit(item)}
-                              className="px-3 py-1 bg-sky-600 text-white rounded text-xs font-semibold"
+                              className="px-3 py-1 bg-sky-600 text-white rounded text-xs font-semibold hover:bg-sky-700"
                             >
-                              Save & Approve
+                              Save Edit
                             </button>
                           </div>
                         </div>
                       ) : (
-                        <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-xs leading-relaxed">
-                          {item.itemType === "obligation" && (
-                            <div>
-                              <p className="font-semibold text-slate-900">{parsedVal.description}</p>
-                              <div className="mt-1 flex flex-wrap gap-2 text-slate-500">
-                                <span>Party: <strong>{parsedVal.responsibleParty}</strong></span>
-                                <span>Type: {parsedVal.obligationType}</span>
-                                <span>Recurrence: {parsedVal.recurrence}</span>
-                              </div>
-                            </div>
+                        <div className="text-xs text-slate-800 space-y-1">
+                          {parsedVal.name && (
+                            <p>
+                              <span className="font-semibold text-slate-600">Party: </span>
+                              {parsedVal.name}
+                            </p>
                           )}
-
-                          {item.itemType === "party" && (
-                            <div>
-                              <p className="font-bold text-slate-900">{parsedVal.name}</p>
-                              <p className="text-slate-500">Role: {parsedVal.role}</p>
-                              {parsedVal.address && <p className="text-slate-500">Address: {parsedVal.address}</p>}
-                            </div>
+                          {parsedVal.effectiveDate && (
+                            <p>
+                              <span className="font-semibold text-slate-600">Effective Date: </span>
+                              {parsedVal.effectiveDate}
+                            </p>
                           )}
-
-                          {item.itemType === "clarification_question" && (
-                            <div>
-                              <p className="font-semibold text-slate-900">{parsedVal.question}</p>
-                              <p className="text-slate-500 mt-1">Target Clause: {parsedVal.targetClause}</p>
+                          {parsedVal.expirationDate && (
+                            <p>
+                              <span className="font-semibold text-slate-600">Expiration Date: </span>
+                              {parsedVal.expirationDate}
+                            </p>
+                          )}
+                          {parsedVal.description && (
+                            <p>
+                              <span className="font-semibold text-slate-600">Description: </span>
+                              {parsedVal.description}
+                            </p>
+                          )}
+                          {parsedVal.obligor && (
+                            <p>
+                              <span className="font-semibold text-slate-600">Responsible Party: </span>
+                              {parsedVal.obligor}
+                            </p>
+                          )}
+                          {parsedVal.question && (
+                            <div className="p-3 bg-sky-50 border border-sky-100 rounded-lg text-sky-950 mt-2">
+                              <p className="font-semibold text-sky-900 mb-1 flex items-center">
+                                <MessageSquare className="w-3.5 h-3.5 mr-1" />
+                                Clarification Needed:
+                              </p>
+                              <p>{parsedVal.question}</p>
+                              {Array.isArray(parsedVal.options) && (
+                                <ul className="list-disc pl-5 mt-1 space-y-0.5 text-sky-800">
+                                  {parsedVal.options.map((opt: string, i: number) => (
+                                    <li key={i}>{opt}</li>
+                                  ))}
+                                </ul>
+                              )}
                               {parsedVal.userAnswer && (
-                                <div className="mt-2 p-2 bg-sky-50 border border-sky-100 rounded text-sky-900">
-                                  <strong>Reviewer Answer:</strong> {parsedVal.userAnswer}
-                                </div>
+                                <p className="mt-2 text-xs font-bold text-sky-800">
+                                  Recorded Decision: {String(parsedVal.userAnswer)}
+                                </p>
                               )}
                             </div>
                           )}
-
-                          {item.itemType !== "obligation" &&
-                            item.itemType !== "party" &&
-                            item.itemType !== "clarification_question" && (
-                              <p className="font-medium text-slate-800">
-                                {parsedVal.description || parsedVal.summary || JSON.stringify(parsedVal)}
-                              </p>
+                          {!parsedVal.name &&
+                            !parsedVal.description &&
+                            !parsedVal.effectiveDate &&
+                            !parsedVal.question && (
+                              <pre className="text-[11px] font-mono bg-slate-50 p-2 rounded border border-slate-100 overflow-x-auto">
+                                {item.currentValue}
+                              </pre>
                             )}
-
-                          {/* Verbatim Quote */}
-                          <div className="mt-2.5 pt-2 border-t border-slate-200 text-slate-500 italic">
-                            "{item.exactQuote}"
-                          </div>
                         </div>
                       )}
                     </div>
 
-                    {/* Date Details & Override */}
-                    {(item.calculatedDate || item.manualDateOverride) && (
-                      <div className="mt-3 flex items-center justify-between p-2.5 bg-sky-50/50 border border-sky-100 rounded-lg text-xs">
+                    {/* Calculated Dates & Override Box */}
+                    {item.calculatedDate && (
+                      <div className="mt-3 p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between text-xs">
                         <div className="flex items-center space-x-2">
-                          <Calendar className="w-3.5 h-3.5 text-sky-600" />
-                          <span>
-                            Deadline Date:{" "}
-                            <strong>
-                              {item.manualDateOverride || item.calculatedDate}
-                            </strong>
-                            {item.manualDateOverride && (
-                              <span className="ml-1 text-amber-700 font-semibold">(Manually Overridden)</span>
+                          <Calendar className="w-4 h-4 text-sky-600" />
+                          <div>
+                            <span className="font-semibold text-slate-700">Calculated Deadline: </span>
+                            <span className="font-mono text-slate-900 font-bold">
+                              {new Date(item.calculatedDate).toLocaleDateString()}
+                            </span>
+                            {item.dateResolutionReason && (
+                              <span className="text-[11px] text-slate-400 block">
+                                {item.dateResolutionReason}
+                              </span>
                             )}
-                          </span>
+                          </div>
                         </div>
-                        <button
-                          onClick={() => {
-                            setOverridingDateId(item.id);
-                            setNewDateVal(item.manualDateOverride || item.calculatedDate || "");
-                          }}
-                          className="text-xs text-sky-600 hover:underline font-semibold"
-                        >
-                          Override
-                        </button>
+
+                        {isOverridingDate ? (
+                          <div className="flex items-center space-x-2">
+                            <input
+                              type="date"
+                              value={newDateVal}
+                              onChange={(e) => setNewDateVal(e.target.value)}
+                              className="p-1 border border-slate-300 rounded text-xs"
+                            />
+                            <button
+                              onClick={() => saveDateOverride(item)}
+                              className="px-2 py-1 bg-sky-600 text-white rounded text-xs font-semibold"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => setOverridingDateId(null)}
+                              className="px-2 py-1 border border-slate-300 rounded text-xs text-slate-600"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setOverridingDateId(item.id);
+                              setNewDateVal(item.calculatedDate?.split("T")[0] || "");
+                            }}
+                            className="text-[11px] font-semibold text-sky-600 hover:underline"
+                          >
+                            Override Date
+                          </button>
+                        )}
                       </div>
                     )}
 
-                    {/* Date Override Form */}
-                    {isOverridingDate && (
-                      <div className="mt-2 p-3 bg-white border border-sky-200 rounded-lg space-y-2">
-                        <label className="block text-xs font-semibold text-slate-700">
-                          Set Override Date (YYYY-MM-DD):
-                        </label>
-                        <div className="flex space-x-2">
-                          <input
-                            type="text"
-                            placeholder="YYYY-MM-DD"
-                            value={newDateVal}
-                            onChange={(e) => setNewDateVal(e.target.value)}
-                            className="px-2.5 py-1 text-xs border border-slate-300 rounded w-40"
-                          />
-                          <button
-                            onClick={() => saveDateOverride(item)}
-                            className="px-3 py-1 bg-sky-600 text-white rounded text-xs font-semibold"
-                          >
-                            Save Override
-                          </button>
-                          <button
-                            onClick={() => setOverridingDateId(null)}
-                            className="px-2.5 py-1 text-xs border border-slate-300 rounded text-slate-600"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Clarification Question Answer Form */}
+                    {/* Clarification Answer Interface */}
                     {item.itemType === "clarification_question" && (
                       <div className="mt-3">
                         {isAnsweringQuestion ? (
-                          <div className="p-3 bg-white border border-sky-200 rounded-lg space-y-2">
-                            <label className="block text-xs font-semibold text-slate-700">
-                              Your Clarification / Answer:
-                            </label>
+                          <div className="space-y-2">
                             <textarea
                               rows={2}
                               value={questionAnswer}
@@ -619,7 +835,9 @@ export const ReviewPage: React.FC = () => {
                           <button
                             onClick={() => {
                               setAnsweringQuestionId(item.id);
-                              setQuestionAnswer(parsedVal.userAnswer || "");
+                              setQuestionAnswer(
+                                typeof parsedVal.userAnswer === "string" ? parsedVal.userAnswer : ""
+                              );
                             }}
                             className="inline-flex items-center text-xs font-semibold text-sky-600 hover:underline"
                           >
@@ -632,41 +850,77 @@ export const ReviewPage: React.FC = () => {
 
                     {/* Action Bar */}
                     <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => handleApprove(item)}
-                          disabled={item.reviewStatus === "approved"}
-                          className={`inline-flex items-center px-3 py-1 rounded text-xs font-semibold transition-colors ${
-                            item.reviewStatus === "approved"
-                              ? "bg-slate-100 text-slate-400 cursor-not-allowed"
-                              : "bg-emerald-600 hover:bg-emerald-700 text-white"
-                          }`}
-                        >
-                          <CheckCircle className="w-3.5 h-3.5 mr-1" />
-                          Approve
-                        </button>
+                      {isStale ? (
+                        /* Stale Item Actions: Re-confirm or Dismiss */
+                        <div className="flex items-center justify-between w-full">
+                          <div className="flex items-center space-x-2">
+                            <button
+                              onClick={() => handleResolveStale(item.id, "reconfirm")}
+                              disabled={resolvingStaleId === item.id}
+                              className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition-colors"
+                            >
+                              <CheckCircle className="w-3.5 h-3.5 mr-1" />
+                              Re-confirm (Keep Approved)
+                            </button>
 
-                        <button
-                          onClick={() => handleReject(item)}
-                          disabled={item.reviewStatus === "rejected"}
-                          className={`inline-flex items-center px-3 py-1 rounded text-xs font-semibold transition-colors ${
-                            item.reviewStatus === "rejected"
-                              ? "bg-slate-100 text-slate-400 cursor-not-allowed"
-                              : "bg-red-50 text-red-700 border border-red-200 hover:bg-red-100"
-                          }`}
-                        >
-                          <XCircle className="w-3.5 h-3.5 mr-1" />
-                          Reject
-                        </button>
-                      </div>
+                            <button
+                              onClick={() => handleResolveStale(item.id, "dismiss")}
+                              disabled={resolvingStaleId === item.id}
+                              className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 transition-colors"
+                            >
+                              <XCircle className="w-3.5 h-3.5 mr-1" />
+                              Dismiss (Mark Rejected)
+                            </button>
+                          </div>
 
-                      <button
-                        onClick={() => startEdit(item)}
-                        className="inline-flex items-center px-2.5 py-1 text-xs text-slate-600 hover:text-slate-900 border border-slate-200 rounded hover:bg-slate-50 transition-colors"
-                      >
-                        <Edit3 className="w-3 h-3 mr-1" />
-                        Edit
-                      </button>
+                          <button
+                            onClick={() => startEdit(item)}
+                            className="inline-flex items-center px-2.5 py-1 text-xs text-slate-600 hover:text-slate-900 border border-slate-200 rounded hover:bg-slate-50 transition-colors"
+                          >
+                            <Edit3 className="w-3 h-3 mr-1" />
+                            Edit Value First
+                          </button>
+                        </div>
+                      ) : (
+                        /* Normal Item Actions: Approve, Reject, Edit */
+                        <>
+                          <div className="flex items-center space-x-2">
+                            <button
+                              onClick={() => handleApprove(item)}
+                              disabled={item.reviewStatus === "approved"}
+                              className={`inline-flex items-center px-3 py-1 rounded text-xs font-semibold transition-colors ${
+                                item.reviewStatus === "approved"
+                                  ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                                  : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                              }`}
+                            >
+                              <CheckCircle className="w-3.5 h-3.5 mr-1" />
+                              Approve
+                            </button>
+
+                            <button
+                              onClick={() => handleReject(item)}
+                              disabled={item.reviewStatus === "rejected"}
+                              className={`inline-flex items-center px-3 py-1 rounded text-xs font-semibold transition-colors ${
+                                item.reviewStatus === "rejected"
+                                  ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                                  : "bg-red-50 text-red-700 border border-red-200 hover:bg-red-100"
+                              }`}
+                            >
+                              <XCircle className="w-3.5 h-3.5 mr-1" />
+                              Reject
+                            </button>
+                          </div>
+
+                          <button
+                            onClick={() => startEdit(item)}
+                            className="inline-flex items-center px-2.5 py-1 text-xs text-slate-600 hover:text-slate-900 border border-slate-200 rounded hover:bg-slate-50 transition-colors"
+                          >
+                            <Edit3 className="w-3 h-3 mr-1" />
+                            Edit
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 );
@@ -675,6 +929,29 @@ export const ReviewPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Upload New Version Modal */}
+      <UploadVersionModal
+        contractId={contract.id}
+        contractTitle={contract.title}
+        latestVersionNumber={contract.totalVersions}
+        isOpen={showUploadVersionModal}
+        onClose={() => setShowUploadVersionModal(false)}
+        onSuccess={(newVer) => {
+          loadData(newVer);
+        }}
+      />
+
+      {/* Version Diff Modal */}
+      <VersionDiffModal
+        contractId={contract.id}
+        contractTitle={contract.title}
+        availableVersions={data.allVersions}
+        defaultV1={activeVersion.versionNumber > 1 ? activeVersion.versionNumber - 1 : 1}
+        defaultV2={activeVersion.versionNumber}
+        isOpen={showDiffModal}
+        onClose={() => setShowDiffModal(false)}
+      />
 
       {/* Audit Log Modal */}
       {showAuditModal && (
@@ -685,10 +962,7 @@ export const ReviewPage: React.FC = () => {
                 <History className="w-5 h-5 text-slate-700" />
                 <h3 className="text-base font-bold text-slate-900">Contract Review Audit Trail</h3>
               </div>
-              <button
-                onClick={() => setShowAuditModal(false)}
-                className="text-slate-400 hover:text-slate-600"
-              >
+              <button onClick={() => setShowAuditModal(false)} className="text-slate-400 hover:text-slate-600">
                 ✕
               </button>
             </div>
@@ -709,14 +983,10 @@ export const ReviewPage: React.FC = () => {
                     </div>
                     {log.note && <p className="text-slate-600">Note: {log.note}</p>}
                     {log.oldValue && (
-                      <div className="text-slate-500 font-mono text-[11px] truncate">
-                        Old: {log.oldValue}
-                      </div>
+                      <div className="text-slate-500 font-mono text-[11px] truncate">Old: {log.oldValue}</div>
                     )}
                     {log.newValue && (
-                      <div className="text-slate-700 font-mono text-[11px] truncate">
-                        New: {log.newValue}
-                      </div>
+                      <div className="text-slate-700 font-mono text-[11px] truncate">New: {log.newValue}</div>
                     )}
                   </div>
                 ))
@@ -745,9 +1015,7 @@ export const ReviewPage: React.FC = () => {
                     All document versions, extracted clauses, citations, deadline calculations, and audit history will be permanently deleted.
                   </p>
                 </div>
-                {deleteError && (
-                  <p className="mt-2 text-xs text-rose-600 font-medium">{deleteError}</p>
-                )}
+                {deleteError && <p className="mt-2 text-xs text-rose-600 font-medium">{deleteError}</p>}
               </div>
               <button
                 onClick={() => setShowDeleteModal(false)}
