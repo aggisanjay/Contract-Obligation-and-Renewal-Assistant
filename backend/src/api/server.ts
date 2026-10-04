@@ -90,30 +90,57 @@ export async function buildServer(): Promise<FastifyInstance> {
       prefix: "/",
       wildcard: false, // Prevents intercepting other routes
     });
+  }
 
-    app.setNotFoundHandler(async (req, reply) => {
-      if (req.raw.url && req.raw.url.startsWith("/api")) {
-        return reply.status(404).send({
-          error: {
-            code: "NOT_FOUND",
-            message: `API Route ${req.method} ${req.url} not found`,
-          },
-        });
-      }
-
-      const indexPath = path.join(frontendDistPath, "index.html");
-      if (fs.existsSync(indexPath)) {
-        return reply.type("text/html").send(fs.createReadStream(indexPath));
-      }
-
+  // Consistent 404 Handler for API routes and SPA Fallback for Web routes
+  app.setNotFoundHandler(async (req, reply) => {
+    const url = req.raw.url || "";
+    if (url.startsWith("/api")) {
       return reply.status(404).send({
         error: {
           code: "NOT_FOUND",
-          message: "Page not found",
+          message: `API Route ${req.method} ${req.url} not found`,
         },
       });
+    }
+
+    if (req.method === "GET" || req.method === "HEAD") {
+      // 1. Try built frontend/dist/index.html
+      if (frontendDistPath) {
+        const indexPath = path.join(frontendDistPath, "index.html");
+        if (fs.existsSync(indexPath)) {
+          return reply.type("text/html").send(fs.createReadStream(indexPath));
+        }
+      }
+
+      // 2. Try source frontend/index.html
+      const currentDir = typeof __dirname !== "undefined" ? __dirname : process.cwd();
+      const candidatePaths = [
+        path.resolve(process.cwd(), "frontend/index.html"),
+        path.resolve(process.cwd(), "../frontend/index.html"),
+        path.resolve(currentDir, "../../frontend/index.html"),
+      ];
+      for (const cand of candidatePaths) {
+        if (fs.existsSync(cand)) {
+          return reply.type("text/html").send(fs.createReadStream(cand));
+        }
+      }
+
+      // 3. Fallback minimal HTML shell
+      return reply
+        .type("text/html")
+        .send(
+          '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Contract Obligation and Renewal Assistant</title></head><body><div id="root"></div></body></html>'
+        );
+    }
+
+    return reply.status(404).send({
+      error: {
+        code: "NOT_FOUND",
+        message: "Page not found",
+      },
     });
-  }
+  });
 
   return app;
 }

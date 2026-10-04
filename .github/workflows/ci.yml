@@ -42,6 +42,9 @@ jobs:
       - name: Build Shared Package
         run: npm --workspace=shared run build
 
+      - name: Build Frontend Bundle
+        run: npm --workspace=frontend run build
+
       - name: Generate Prisma Client & Push Schema
         run: |
           npx --workspace=backend prisma generate
