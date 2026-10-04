@@ -2,7 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { ReviewStatus, ItemType, ExtractionStatus } from "@contract-assistant/shared";
 import { prisma } from "../../models/prisma.js";
 import { compileReviewedSummary } from "../../services/summaryCompiler.js";
-import { NotFoundError } from "../../utils/errors.js";
+import { NotFoundError, BadRequestError } from "../../utils/errors.js";
 
 export async function summaryRoutes(app: FastifyInstance) {
   /**
@@ -32,7 +32,10 @@ export async function summaryRoutes(app: FastifyInstance) {
       throw new NotFoundError(`Contract with id ${id} not found.`);
     }
 
-    const latestVersion = contract.versions[0]!;
+    const latestVersion = contract.versions[0];
+    if (!latestVersion) {
+      throw new BadRequestError(`Contract with id ${id} has no ingested versions yet.`);
+    }
     const latestSummary = contract.summaries[0];
 
     if (!latestSummary) {
@@ -111,7 +114,10 @@ export async function summaryRoutes(app: FastifyInstance) {
       throw new NotFoundError(`Contract with id ${id} not found.`);
     }
 
-    const latestVersion = contract.versions[0]!;
+    const latestVersion = contract.versions[0];
+    if (!latestVersion) {
+      throw new BadRequestError(`Contract with id ${id} has no ingested versions yet.`);
+    }
     const compiled = compileReviewedSummary(
       contract.title,
       latestVersion.versionNumber,

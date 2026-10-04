@@ -15,6 +15,12 @@ export class AppError extends Error {
   }
 }
 
+export class BadRequestError extends AppError {
+  constructor(message: string = "Bad request", code: string = "BAD_REQUEST") {
+    super(message, 400, code);
+  }
+}
+
 export class IngestionError extends AppError {
   constructor(message: string, code: string = "INGESTION_FAILED") {
     super(message, 422, code);

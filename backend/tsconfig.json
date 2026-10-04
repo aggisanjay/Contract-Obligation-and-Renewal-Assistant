@@ -21,8 +21,9 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
+    "rootDir": "./src",
     "paths": {
-      "@contract-assistant/shared": ["../shared/src/index.ts"]
+      "@contract-assistant/shared": ["../shared/dist/index.d.ts"]
     }
   },
   "include": ["src/**/*"]

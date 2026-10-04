@@ -282,7 +282,7 @@ export class GeminiClient implements LLMClient {
     };
   } | null = null;
 
-  constructor(apiKey: string, modelName: string = "gemini-2.5-flash") {
+  constructor(apiKey: string, modelName: string = "gemini-3.8-flash") {
     this.apiKey = apiKey;
     this.modelName = modelName;
   }
@@ -359,7 +359,7 @@ export class GroqClient implements LLMClient {
 
   constructor(
     apiKey: string,
-    modelName: string = "llama-3.3-70b-versatile",
+    modelName: string = "qwen/qwen3.8-27b",
     apiUrl: string = "https://api.groq.com/openai/v1/chat/completions"
   ) {
     this.apiKey = apiKey;
@@ -627,7 +627,7 @@ export function getLLMClient(): LLMClient {
   const providers: NamedLLMClient[] = [];
 
   const geminiKey = process.env.GEMINI_API_KEY?.trim();
-  const geminiModel = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  const geminiModel = process.env.GEMINI_MODEL || "gemini-3.8-flash";
   if (geminiKey) {
     providers.push({
       name: "Gemini",
@@ -636,7 +636,7 @@ export function getLLMClient(): LLMClient {
   }
 
   const groqKey = process.env.GROQ_API_KEY?.trim();
-  const groqModel = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+  const groqModel = process.env.GROQ_MODEL || "qwen/qwen3.8-27b";
   if (groqKey) {
     providers.push({
       name: "Groq",
