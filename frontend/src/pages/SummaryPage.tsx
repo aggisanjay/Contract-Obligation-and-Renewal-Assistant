@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
-import { getContractSummary, generateContractSummary, API_BASE } from "../services/api.js";
+import { getContractSummary, generateContractSummary } from "../services/api.js";
 import {
   CompiledSummaryData,
   SummaryParty,
@@ -8,7 +8,6 @@ import {
   SummaryAmbiguity,
 } from "@contract-assistant/shared";
 import {
-  Download,
   Printer,
   RefreshCw,
   AlertTriangle,
@@ -17,6 +16,8 @@ import {
   Calendar,
   Building2,
   Scale,
+  Copy,
+  Check,
 } from "lucide-react";
 
 export const SummaryPage: React.FC = () => {
@@ -27,6 +28,7 @@ export const SummaryPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [regenerating, setRegenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const loadSummary = async () => {
     if (!id) return;
@@ -64,11 +66,27 @@ export const SummaryPage: React.FC = () => {
   };
 
   const handlePrint = () => {
-    window.open(`${API_BASE}/contracts/${id}/summary/export/html`, "_blank");
+    // Triggers native browser print dialog with print-optimized styles
+    window.print();
   };
 
-  const handleDownloadMarkdown = () => {
-    window.open(`${API_BASE}/contracts/${id}/summary/export/markdown`, "_blank");
+  const handleCopy = async () => {
+    if (!compiled) return;
+    try {
+      await navigator.clipboard.writeText(compiled.markdown);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2200);
+    } catch {
+      // Fallback if clipboard API not permitted
+      const textarea = document.createElement("textarea");
+      textarea.value = compiled.markdown;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2200);
+    }
   };
 
   if (loading) {
@@ -103,7 +121,7 @@ export const SummaryPage: React.FC = () => {
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 flex-1">
       {/* Back Link & Header */}
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+      <div className="no-print mb-6 flex flex-wrap items-center justify-between gap-4">
         <Link
           to={`/contracts/${id}`}
           className="inline-flex items-center text-xs font-bold text-slate-600 hover:text-slate-900 transition-colors group"
@@ -130,16 +148,27 @@ export const SummaryPage: React.FC = () => {
           </button>
 
           <button
-            onClick={handleDownloadMarkdown}
-            className="inline-flex items-center px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl shadow-xs transition-all active:scale-95"
+            onClick={handleCopy}
+            className="inline-flex items-center px-3.5 py-1.5 border border-slate-200/90 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl shadow-2xs transition-all active:scale-95"
+            title="Copy formatted summary to clipboard"
           >
-            <Download className="w-3.5 h-3.5 mr-1.5 text-slate-300" />
-            Export Markdown
+            {copied ? (
+              <>
+                <Check className="w-3.5 h-3.5 mr-1.5 text-emerald-600" />
+                <span className="text-emerald-700">Copied!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-3.5 h-3.5 mr-1.5 text-slate-500" />
+                Copy Summary
+              </>
+            )}
           </button>
 
           <button
             onClick={handlePrint}
-            className="inline-flex items-center px-3.5 py-1.5 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl shadow-xs hover:shadow-glow-sky transition-all active:scale-95"
+            className="inline-flex items-center px-4 py-1.5 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl shadow-xs hover:shadow-glow-sky transition-all active:scale-95"
+            title="Print or Save as PDF"
           >
             <Printer className="w-3.5 h-3.5 mr-1.5 text-sky-100" />
             Print / PDF
@@ -185,7 +214,7 @@ export const SummaryPage: React.FC = () => {
                 <div key={idx} className="p-4 bg-slate-50/60 border border-slate-200/80 rounded-2xl text-xs hover:border-slate-300 transition-all shadow-2xs">
                   <p className="font-bold text-slate-900 text-sm font-heading">{p.name}</p>
                   <p className="text-slate-600 mt-1">Role: <span className="font-semibold text-slate-800">{p.role}</span></p>
-                  <p className="text-slate-400 italic mt-2.5 text-[11px] font-mono bg-white p-2 rounded-lg border border-slate-100">{p.citation}</p>
+                  <p className="text-slate-400 italic mt-2.5 text-[11px] font-mono bg-white p-2 rounded-lg border border-slate-100 break-words">{p.citation}</p>
                 </div>
               ))}
             </div>
@@ -219,7 +248,7 @@ export const SummaryPage: React.FC = () => {
             </div>
           </div>
           {compiled.keyDates.citation && (
-            <p className="text-[11px] text-slate-400 italic mt-2.5 font-mono bg-slate-50/50 p-2 rounded-lg border border-slate-100">{compiled.keyDates.citation}</p>
+            <p className="text-[11px] text-slate-400 italic mt-2.5 font-mono bg-slate-50/50 p-2 rounded-lg border border-slate-100 break-words">{compiled.keyDates.citation}</p>
           )}
         </div>
 
@@ -232,12 +261,12 @@ export const SummaryPage: React.FC = () => {
             <div className="p-4 bg-slate-50/60 border border-slate-200/80 rounded-2xl shadow-2xs">
               <span className="font-bold text-slate-900 font-heading">Renewal Clause: </span>
               <span className="text-slate-700 leading-relaxed">{compiled.renewalTerms.summary}</span>
-              <p className="text-slate-400 italic text-[11px] mt-2 font-mono bg-white p-2 rounded-lg border border-slate-100">{compiled.renewalTerms.citation}</p>
+              <p className="text-slate-400 italic text-[11px] mt-2 font-mono bg-white p-2 rounded-lg border border-slate-100 break-words">{compiled.renewalTerms.citation}</p>
             </div>
             <div className="p-4 bg-slate-50/60 border border-slate-200/80 rounded-2xl shadow-2xs">
               <span className="font-bold text-slate-900 font-heading">Termination Clause: </span>
               <span className="text-slate-700 leading-relaxed">{compiled.terminationTerms.summary}</span>
-              <p className="text-slate-400 italic text-[11px] mt-2 font-mono bg-white p-2 rounded-lg border border-slate-100">{compiled.terminationTerms.citation}</p>
+              <p className="text-slate-400 italic text-[11px] mt-2 font-mono bg-white p-2 rounded-lg border border-slate-100 break-words">{compiled.terminationTerms.citation}</p>
             </div>
           </div>
         </div>
@@ -251,29 +280,46 @@ export const SummaryPage: React.FC = () => {
           {compiled.obligations.length === 0 ? (
             <p className="text-xs text-slate-400 italic">No approved obligations recorded.</p>
           ) : (
-            <div className="border border-slate-200/90 rounded-2xl overflow-hidden shadow-card">
-              <table className="w-full text-left text-xs divide-y divide-slate-200">
+            <div className="border border-slate-200/90 rounded-2xl overflow-x-auto shadow-card bg-white">
+              <table className="w-full text-left text-xs divide-y divide-slate-200 min-w-[760px] table-fixed">
+                <colgroup>
+                  <col className="w-[15%]" />
+                  <col className="w-[33%]" />
+                  <col className="w-[20%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[20%]" />
+                </colgroup>
                 <thead className="bg-slate-50/80 text-slate-700 font-bold uppercase tracking-wider text-[10px] font-heading">
                   <tr>
-                    <th className="p-3.5">Party</th>
-                    <th className="p-3.5">Obligation</th>
-                    <th className="p-3.5">Deadline</th>
-                    <th className="p-3.5">Recurrence</th>
-                    <th className="p-3.5">Citation</th>
+                    <th className="p-3.5 font-semibold">Party</th>
+                    <th className="p-3.5 font-semibold">Obligation</th>
+                    <th className="p-3.5 font-semibold">Deadline</th>
+                    <th className="p-3.5 font-semibold">Recurrence</th>
+                    <th className="p-3.5 font-semibold">Source Citation</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
                   {compiled.obligations.map((o: SummaryObligation, idx: number) => (
                     <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="p-3.5 font-bold text-slate-900 font-heading">{o.responsibleParty}</td>
-                      <td className="p-3.5 text-slate-800 leading-relaxed">{o.description}</td>
-                      <td className="p-3.5 font-mono font-bold text-sky-700 whitespace-nowrap">{o.deadline}</td>
-                      <td className="p-3.5">
-                        <span className="px-2 py-0.5 bg-slate-100 rounded text-[10px] uppercase font-mono font-semibold text-slate-600 border border-slate-200/70">
+                      <td className="p-3.5 align-top font-bold text-slate-900 font-heading">
+                        <span className="inline-block px-2.5 py-1 bg-slate-100 text-slate-800 rounded-lg text-xs font-semibold border border-slate-200/60 break-words">
+                          {o.responsibleParty}
+                        </span>
+                      </td>
+                      <td className="p-3.5 align-top text-slate-800 leading-relaxed font-normal break-words">
+                        {o.description}
+                      </td>
+                      <td className="p-3.5 align-top font-mono text-xs font-semibold text-sky-700 leading-snug break-words">
+                        {o.deadline || "None specified"}
+                      </td>
+                      <td className="p-3.5 align-top">
+                        <span className="inline-block px-2 py-0.5 bg-sky-50 text-sky-700 rounded text-[10px] uppercase font-mono font-bold border border-sky-200/70">
                           {o.recurrence}
                         </span>
                       </td>
-                      <td className="p-3.5 text-slate-400 italic text-[11px] font-mono">{o.citation}</td>
+                      <td className="p-3.5 align-top text-slate-500 italic text-[11px] font-mono leading-relaxed break-words">
+                        {o.citation}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

@@ -74,3 +74,75 @@ button, a {
 button:active:not(:disabled), a:active:not(:disabled) {
   transform: scale(0.985);
 }
+
+/* Print & PDF styling */
+@media print {
+  /* Hide all interactive non-print chrome */
+  header,
+  footer,
+  nav,
+  aside,
+  .no-print {
+    display: none !important;
+  }
+
+  /* Reset layout to print cleanly on paper */
+  body, #root, main {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .max-w-4xl, .max-w-7xl, .max-w-xl {
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Remove screen borders, shadows, and margins */
+  .shadow-card, .shadow-2xs, .shadow-xs, .shadow-lg, .shadow-2xl, .shadow-glow-sky {
+    box-shadow: none !important;
+  }
+
+  .rounded-3xl, .rounded-2xl {
+    border-radius: 6px !important;
+  }
+
+  /* Force background colors to print */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Table print optimization */
+  table {
+    width: 100% !important;
+    min-width: 100% !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+    page-break-inside: auto;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+  }
+
+  thead {
+    display: table-header-group !important;
+  }
+
+  th, td {
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+    white-space: normal !important;
+  }
+
+  @page {
+    size: auto;
+    margin: 12mm 15mm 15mm 15mm;
+  }
+}

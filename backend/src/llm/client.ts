@@ -205,6 +205,66 @@ export class MockLLMClient implements LLMClient {
 }
 
 /**
+ * Robustly parses JSON from LLM outputs, handling Markdown code fences (```json ... ```),
+ * preamble conversational prose, reasoning tags, or trailing explanations.
+ */
+export function extractCleanJson(rawContent: string): unknown {
+  const trimmed = (rawContent || "").trim();
+  if (!trimmed) {
+    throw new Error("LLM returned empty response content");
+  }
+
+  // 1. Direct JSON parse attempt
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    // continue to extractors
+  }
+
+  // 2. Extract content between markdown code blocks: ```json ... ``` or ``` ... ```
+  const codeBlockMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (codeBlockMatch && codeBlockMatch[1]) {
+    try {
+      return JSON.parse(codeBlockMatch[1].trim());
+    } catch {
+      // continue
+    }
+  }
+
+  // 3. Fallback: Locate outermost JSON object {...} or array [...]
+  const firstBrace = trimmed.indexOf("{");
+  const firstBracket = trimmed.indexOf("[");
+  let startIdx = -1;
+  let endIdx = -1;
+
+  if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+    startIdx = firstBrace;
+    endIdx = trimmed.lastIndexOf("}");
+  } else if (firstBracket !== -1) {
+    startIdx = firstBracket;
+    endIdx = trimmed.lastIndexOf("]");
+  }
+
+  if (startIdx !== -1 && endIdx > startIdx) {
+    const candidate = trimmed.substring(startIdx, endIdx + 1).trim();
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      // continue
+    }
+  }
+
+  // 4. If all extractions fail, attempt clean replacement of common artifacts
+  const cleanJson = trimmed
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/```\s*$/i, "")
+    .trim();
+
+  return JSON.parse(cleanJson);
+}
+
+/**
  * Normalizes output from diverse LLM providers (Gemini, Groq, Hugging Face)
  * before schema validation, ensuring structural resilience against common LLM
  * quirks (such as raw arrays instead of { items: [...] }, variant property names,
@@ -324,12 +384,7 @@ export class GeminiClient implements LLMClient {
         });
 
         const rawText = response.text || "";
-        const cleanJson = rawText
-          .replace(/^```json\s*/i, "")
-          .replace(/```\s*$/i, "")
-          .trim();
-
-        const jsonObject = JSON.parse(cleanJson);
+        const jsonObject = extractCleanJson(rawText);
         const normalized = normalizeLLMOutput(jsonObject, options?.stepName);
         const parsed = schema.parse(normalized);
 
@@ -417,12 +472,7 @@ export class GroqClient implements LLMClient {
           choices?: Array<{ message?: { content?: string } }>;
         };
         const rawContent = data.choices?.[0]?.message?.content || "";
-        const cleanJson = rawContent
-          .replace(/^```json\s*/i, "")
-          .replace(/```\s*$/i, "")
-          .trim();
-
-        const jsonObject = JSON.parse(cleanJson);
+        const jsonObject = extractCleanJson(rawContent);
         const normalized = normalizeLLMOutput(jsonObject, options?.stepName);
         const parsed = schema.parse(normalized);
         const { sanitized } = sanitizePayloadRecursively(parsed);
@@ -496,7 +546,7 @@ export class HuggingFaceClient implements LLMClient {
             response_format: { type: "json_object" },
             temperature: options?.temperature ?? 0.1,
           }),
-          signal: AbortSignal.timeout(60000),
+          signal: AbortSignal.timeout(90000),
         });
 
         if (!response.ok) {
@@ -508,12 +558,7 @@ export class HuggingFaceClient implements LLMClient {
           choices?: Array<{ message?: { content?: string } }>;
         };
         const rawContent = data.choices?.[0]?.message?.content || "";
-        const cleanJson = rawContent
-          .replace(/^```json\s*/i, "")
-          .replace(/```\s*$/i, "")
-          .trim();
-
-        const jsonObject = JSON.parse(cleanJson);
+        const jsonObject = extractCleanJson(rawContent);
         const normalized = normalizeLLMOutput(jsonObject, options?.stepName);
         const parsed = schema.parse(normalized);
         const { sanitized } = sanitizePayloadRecursively(parsed);
@@ -636,7 +681,7 @@ export function getLLMClient(): LLMClient {
   }
 
   const groqKey = process.env.GROQ_API_KEY?.trim();
-  const groqModel = process.env.GROQ_MODEL || "qwen/qwen3.8-27b";
+  const groqModel = process.env.GROQ_MODEL || "openai/gpt-oss-20b";
   if (groqKey) {
     providers.push({
       name: "Groq",

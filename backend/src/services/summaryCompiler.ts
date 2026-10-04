@@ -268,26 +268,48 @@ ${
   <meta charset="UTF-8">
   <title>Reviewed Summary - ${contractTitle} (v${versionNumber})</title>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1e293b; line-height: 1.5; padding: 2rem; max-width: 900px; margin: auto; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1e293b; line-height: 1.5; padding: 2rem; max-width: 960px; margin: auto; }
     h1 { font-size: 1.75rem; border-bottom: 2px solid #0284c7; padding-bottom: 0.5rem; margin-bottom: 0.25rem; }
     h2 { font-size: 1.25rem; margin-top: 1.5rem; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.25rem; }
     .disclaimer { background: #fef3c7; border: 1px solid #f59e0b; color: #78350f; padding: 0.75rem 1rem; border-radius: 0.5rem; font-size: 0.85rem; font-weight: 500; margin: 1rem 0; }
     .meta { font-size: 0.85rem; color: #64748b; margin-bottom: 1.5rem; }
-    table { width: 100%; border-collapse: collapse; margin-top: 0.75rem; font-size: 0.85rem; }
-    th, td { border: 1px solid #cbd5e1; padding: 0.5rem 0.75rem; text-align: left; }
+    .print-toolbar { display: flex; gap: 0.75rem; align-items: center; margin-bottom: 1.5rem; padding: 0.75rem 1rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; }
+    .print-btn { background: #0284c7; color: #ffffff; border: none; padding: 0.5rem 1rem; font-size: 0.875rem; font-weight: 600; border-radius: 0.375rem; cursor: pointer; }
+    .print-btn:hover { background: #0369a1; }
+    .close-btn { background: #e2e8f0; color: #334155; border: none; padding: 0.5rem 1rem; font-size: 0.875rem; font-weight: 600; border-radius: 0.375rem; cursor: pointer; }
+    table { width: 100%; border-collapse: collapse; margin-top: 0.75rem; font-size: 0.85rem; table-layout: fixed; }
+    th, td { border: 1px solid #cbd5e1; padding: 0.5rem 0.75rem; text-align: left; vertical-align: top; word-break: break-word; overflow-wrap: break-word; }
     th { background: #f8fafc; font-weight: 600; }
-    .citation { font-style: italic; color: #64748b; font-size: 0.8rem; }
+    th:nth-child(1), td:nth-child(1) { width: 15%; }
+    th:nth-child(2), td:nth-child(2) { width: 33%; }
+    th:nth-child(3), td:nth-child(3) { width: 20%; font-family: ui-monospace, SFMono-Regular, monospace; }
+    th:nth-child(4), td:nth-child(4) { width: 12%; }
+    th:nth-child(5), td:nth-child(5) { width: 20%; }
+    .citation { font-style: italic; color: #64748b; font-size: 0.8rem; word-break: break-word; }
     .metrics { display: flex; gap: 1.5rem; margin-top: 1rem; }
     .metric-card { background: #f1f5f9; padding: 0.75rem 1rem; border-radius: 0.375rem; font-size: 0.85rem; font-weight: 600; }
     @media print {
-      body { padding: 0; font-size: 11pt; }
-      .no-print { display: none; }
-      table { page-break-inside: auto; }
+      body { padding: 0; font-size: 10.5pt; max-width: 100%; margin: 0; }
+      .no-print { display: none !important; }
+      table { page-break-inside: auto; width: 100% !important; }
       tr { page-break-inside: avoid; }
+      @page { size: auto; margin: 12mm 15mm; }
     }
   </style>
+  <script>
+    window.addEventListener('load', function() {
+      // Prompt print dialog after page renders
+      setTimeout(function() {
+        window.print();
+      }, 350);
+    });
+  </script>
 </head>
 <body>
+  <div class="no-print print-toolbar">
+    <button onclick="window.print()" class="print-btn">🖨️ Print / Save as PDF</button>
+    <button onclick="window.close()" class="close-btn">Close Window</button>
+  </div>
   <h1>Reviewed Contract Summary: ${contractTitle}</h1>
   <div class="meta">Contract Version: v${versionNumber} | Generated At: ${new Date(generatedAt).toUTCString()}</div>
   <div class="disclaimer">
