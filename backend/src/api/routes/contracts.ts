@@ -7,6 +7,7 @@ import {
   computeNoticeDeadline,
   resolveRelativeDeadline,
   applyManualOverride,
+  resolveItemCalculatedDate,
 } from "../../services/dates.js";
 import {
   ReviewItemActionSchema,
@@ -298,6 +299,52 @@ export async function contractRoutes(app: FastifyInstance) {
         ? contract.versions.find((v) => v.versionNumber === targetVersionNumber)
         : null) || contract.versions[0]!;
 
+    // Ensure all items in activeVersion have calculated dates resolved
+    const effItem = activeVersion.extractedItems.find((i) => i.itemType === "effective_date");
+    let effDate: string | null = effItem ? (effItem.manualDateOverride || effItem.calculatedDate) : null;
+    if (effItem && !effDate) {
+      const effRes = resolveItemCalculatedDate(effItem, {});
+      if (effRes.calculatedDate) {
+        effDate = effRes.calculatedDate;
+        effItem.calculatedDate = effDate;
+        effItem.dateResolutionStatus = "resolved";
+        await prisma.extractedItem.update({
+          where: { id: effItem.id },
+          data: { calculatedDate: effDate, dateResolutionStatus: "resolved" },
+        }).catch(() => {});
+      }
+    }
+
+    const expItem = activeVersion.extractedItems.find((i) => i.itemType === "expiry" || i.itemType === "term");
+    let expDate: string | null = expItem ? (expItem.manualDateOverride || expItem.calculatedDate) : null;
+    if (expItem && !expDate && effDate) {
+      const expRes = resolveItemCalculatedDate(expItem, { effectiveDate: effDate });
+      if (expRes.calculatedDate) {
+        expDate = expRes.calculatedDate;
+        expItem.calculatedDate = expDate;
+        expItem.dateResolutionStatus = "resolved";
+        await prisma.extractedItem.update({
+          where: { id: expItem.id },
+          data: { calculatedDate: expDate, dateResolutionStatus: "resolved" },
+        }).catch(() => {});
+      }
+    }
+
+    for (const item of activeVersion.extractedItems) {
+      if (!item.calculatedDate && !item.manualDateOverride) {
+        const res = resolveItemCalculatedDate(item, { effectiveDate: effDate, expiryDate: expDate });
+        if (res.calculatedDate) {
+          item.calculatedDate = res.calculatedDate;
+          item.dateResolutionStatus = res.status;
+          item.dateResolutionReason = res.reason || null;
+          await prisma.extractedItem.update({
+            where: { id: item.id },
+            data: { calculatedDate: res.calculatedDate, dateResolutionStatus: res.status, dateResolutionReason: res.reason || null },
+          }).catch(() => {});
+        }
+      }
+    }
+
     return reply.send({
       contract: {
         id: contract.id,
@@ -345,6 +392,7 @@ export async function contractRoutes(app: FastifyInstance) {
     let newReviewStatus = item.reviewStatus;
     let newCurrentValue = item.currentValue;
     let userEdited = item.userEdited;
+    let calculatedDate = item.calculatedDate;
     let manualDateOverride = item.manualDateOverride;
     let dateResolutionStatus = item.dateResolutionStatus;
     let dateResolutionReason = item.dateResolutionReason;
@@ -362,9 +410,24 @@ export async function contractRoutes(app: FastifyInstance) {
         userEdited = true;
         newReviewStatus = "edited_approved";
         auditAction = "item_edited";
+
+        // Re-evaluate calculated date from edited newValue
+        const dateRes = resolveItemCalculatedDate(
+          { itemType: item.itemType, currentValue: newCurrentValue, exactQuote: item.exactQuote },
+          { effectiveDate: null, expiryDate: null }
+        );
+        if (dateRes.calculatedDate) {
+          calculatedDate = dateRes.calculatedDate;
+          dateResolutionStatus = dateRes.status;
+          dateResolutionReason = dateRes.reason || "Updated from edited clause";
+        }
       }
     } else if (body.action === "override_date") {
-      if (body.newValue) {
+      if (body.newValue === "" || body.newValue === "reset") {
+        manualDateOverride = null;
+        dateResolutionReason = "Manual override removed; calculated date restored.";
+        auditAction = "date_override_cleared";
+      } else if (body.newValue) {
         const overrideRes = applyManualOverride(item.calculatedDate, body.newValue, body.note);
         if (overrideRes.status === "resolved") {
           manualDateOverride = overrideRes.manualDateOverride;
@@ -398,11 +461,53 @@ export async function contractRoutes(app: FastifyInstance) {
         reviewStatus: newReviewStatus,
         currentValue: newCurrentValue,
         userEdited,
+        calculatedDate,
         manualDateOverride,
         dateResolutionStatus,
         dateResolutionReason,
       },
     });
+
+    // If effective_date or expiry/term changed or was overridden, cascade date updates
+    if (item.itemType === "effective_date" || item.itemType === "expiry" || item.itemType === "term") {
+      const allItems = await prisma.extractedItem.findMany({
+        where: { contractVersionId: item.contractVersionId },
+      });
+
+      const eff = allItems.find((i) => i.itemType === "effective_date");
+      const activeEffDate = eff ? (eff.id === item.id ? (manualDateOverride || calculatedDate) : (eff.manualDateOverride || eff.calculatedDate)) : null;
+
+      const exp = allItems.find((i) => i.itemType === "expiry" || i.itemType === "term");
+      let activeExpDate = exp ? (exp.id === item.id ? (manualDateOverride || calculatedDate) : (exp.manualDateOverride || exp.calculatedDate)) : null;
+
+      // Recompute expiry if not overridden and effDate changed
+      if (exp && exp.id !== item.id && !exp.manualDateOverride && activeEffDate) {
+        const expRes = resolveItemCalculatedDate(exp, { effectiveDate: activeEffDate });
+        if (expRes.calculatedDate && expRes.calculatedDate !== exp.calculatedDate) {
+          activeExpDate = expRes.calculatedDate;
+          await prisma.extractedItem.update({
+            where: { id: exp.id },
+            data: { calculatedDate: expRes.calculatedDate, dateResolutionStatus: expRes.status, dateResolutionReason: expRes.reason },
+          });
+        }
+      }
+
+      // Recompute dependent renewal/notice items and obligations
+      for (const other of allItems) {
+        if (other.id === item.id) continue;
+        if (other.manualDateOverride) continue; // Respect existing manual overrides!
+
+        if (other.itemType === "renewal" || other.itemType === "notice" || other.itemType === "obligation") {
+          const res = resolveItemCalculatedDate(other, { effectiveDate: activeEffDate, expiryDate: activeExpDate });
+          if (res.calculatedDate && res.calculatedDate !== other.calculatedDate) {
+            await prisma.extractedItem.update({
+              where: { id: other.id },
+              data: { calculatedDate: res.calculatedDate, dateResolutionStatus: res.status, dateResolutionReason: res.reason },
+            });
+          }
+        }
+      }
+    }
 
     // Create Audit Log
     await prisma.auditLog.create({

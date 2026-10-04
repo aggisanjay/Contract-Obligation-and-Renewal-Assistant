@@ -257,8 +257,8 @@ export async function getAuditLog(contractId: string): Promise<{ logs: AuditLog[
   return data;
 }
 
-export async function getDashboardData(timeframeDays?: number): Promise<DashboardData> {
-  const query = timeframeDays ? `?timeframe=${timeframeDays}` : "";
+export async function getDashboardData(timeframe?: string | number): Promise<DashboardData> {
+  const query = timeframe && timeframe !== "all" ? `?timeframe=${timeframe}` : "";
   const res = await fetch(`${API_BASE}/dashboard${query}`);
   const data = await res.json();
   if (!res.ok) {

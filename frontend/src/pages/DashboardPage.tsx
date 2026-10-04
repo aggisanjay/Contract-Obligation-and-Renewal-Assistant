@@ -49,7 +49,7 @@ export const DashboardPage: React.FC = () => {
   const loadData = async () => {
     try {
       setLoading(true);
-      const res = await getDashboardData(timeframe === "all" || timeframe === "overdue" ? undefined : parseInt(timeframe, 10));
+      const res = await getDashboardData(timeframe === "all" ? undefined : timeframe);
       setData(res);
     } catch (err) {
       console.error(err);
@@ -82,7 +82,8 @@ export const DashboardPage: React.FC = () => {
 
   const filteredFirmDeadlines = (data?.firmDeadlines || []).filter((item) => {
     if (timeframe === "overdue") return item.urgency === "overdue";
-    if (partySearch && item.responsibleParty) {
+    if (partySearch) {
+      if (!item.responsibleParty) return false;
       return item.responsibleParty.toLowerCase().includes(partySearch.toLowerCase());
     }
     return true;
@@ -94,6 +95,14 @@ export const DashboardPage: React.FC = () => {
         <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200/80 shadow-2xs">
           <AlertCircle className="w-3.5 h-3.5 mr-1 text-rose-600" />
           Overdue ({Math.abs(daysRemaining)}d ago)
+        </span>
+      );
+    }
+    if (daysRemaining === 0) {
+      return (
+        <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-100 text-rose-800 border border-rose-300 shadow-2xs">
+          <Clock className="w-3.5 h-3.5 mr-1 text-rose-700" />
+          Due Today
         </span>
       );
     }
@@ -116,17 +125,41 @@ export const DashboardPage: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1">
       {/* Page Header */}
-      <div className="mb-8">
-        <div className="flex items-center space-x-2 text-xs font-bold text-sky-600 tracking-wider uppercase mb-1 font-heading">
-          <Sparkles className="w-3.5 h-3.5" />
-          <span>Deterministic Schedule</span>
+      <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <div className="flex items-center space-x-2 text-xs font-bold text-sky-600 tracking-wider uppercase mb-1 font-heading">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Deterministic Schedule</span>
+          </div>
+          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight font-heading">
+            Obligation & Renewal Deadlines
+          </h1>
+          <p className="mt-1.5 text-sm text-slate-500 max-w-2xl leading-relaxed">
+            Deterministic deadline tracking for confirmed & approved contract commitments.
+          </p>
         </div>
-        <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight font-heading">
-          Obligation & Renewal Deadlines
-        </h1>
-        <p className="mt-1.5 text-sm text-slate-500 max-w-2xl leading-relaxed">
-          Deterministic deadline tracking for confirmed & approved contract commitments.
-        </p>
+
+        {data?.today && (
+          <div className="flex items-center space-x-3 px-4 py-2.5 bg-gradient-to-r from-sky-50 to-indigo-50/60 border border-sky-200/90 rounded-2xl shadow-xs self-start md:self-auto">
+            <div className="w-9 h-9 rounded-xl bg-white border border-sky-200 flex items-center justify-center text-sky-600 shrink-0 shadow-2xs">
+              <Calendar className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-[10px] uppercase font-extrabold text-sky-700 tracking-wider font-heading">
+                Today's Reference Date
+              </p>
+              <p className="text-sm font-extrabold text-slate-900 font-mono">
+                {new Date(data.today + "T00:00:00Z").toLocaleDateString("en-US", {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                  timeZone: "UTC",
+                })}
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Metrics Banner */}
@@ -180,7 +213,7 @@ export const DashboardPage: React.FC = () => {
             <span className="text-xs font-bold text-slate-600 font-heading">Timeframe:</span>
           </div>
           {[
-            { id: "all", label: "All Upcoming" },
+            { id: "all", label: "All Deadlines" },
             { id: "7", label: "Next 7 Days" },
             { id: "30", label: "Next 30 Days" },
             { id: "90", label: "Next 90 Days" },
@@ -242,12 +275,15 @@ export const DashboardPage: React.FC = () => {
                 className="p-5 hover:bg-slate-50/80 transition-colors flex items-center justify-between gap-4"
               >
                 <div className="flex items-center space-x-4">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200/70 border border-slate-200 flex flex-col items-center justify-center shrink-0 shadow-2xs">
-                    <span className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">
-                      {item.deadlineDate.slice(5, 7)}
+                  <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200/90 flex flex-col items-center justify-center shrink-0 shadow-2xs">
+                    <span className="text-[10px] font-extrabold uppercase text-sky-700 tracking-wider">
+                      {new Date(item.deadlineDate + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })}
                     </span>
-                    <span className="text-base font-black text-slate-900 font-mono">
+                    <span className="text-base font-black text-slate-900 font-mono leading-none my-0.5">
                       {item.deadlineDate.slice(8, 10)}
+                    </span>
+                    <span className="text-[9px] font-mono text-slate-400 font-medium">
+                      {item.deadlineDate.slice(0, 4)}
                     </span>
                   </div>
 

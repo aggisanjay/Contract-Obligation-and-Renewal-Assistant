@@ -5,6 +5,7 @@ import { runExtractionPipeline } from "../../services/extractionPipeline.js";
 import { detectStaleItems, compareVersionSections } from "../../services/staleDetector.js";
 import { StaleResolveActionSchema } from "@contract-assistant/shared";
 import { NotFoundError, AppError } from "../../utils/errors.js";
+import { resolveItemCalculatedDate } from "../../services/dates.js";
 
 export async function versionRoutes(app: FastifyInstance) {
   /**
@@ -153,6 +154,23 @@ export async function versionRoutes(app: FastifyInstance) {
     let carriedOverCount = 0;
     let newItemsCount = 0;
 
+    // Deterministically resolve effective date and expiry date anchors for new version
+    const effDraft = newDraftsWithId.find((d) => d.itemType === "effective_date");
+    const effDate = effDraft
+      ? resolveItemCalculatedDate(
+          { itemType: effDraft.itemType, currentValue: JSON.stringify(effDraft.originalPayload), exactQuote: effDraft.exactQuote },
+          {}
+        ).calculatedDate
+      : null;
+
+    const termDraft = newDraftsWithId.find((d) => d.itemType === "expiry");
+    const expDate = termDraft
+      ? resolveItemCalculatedDate(
+          { itemType: termDraft.itemType, currentValue: JSON.stringify(termDraft.originalPayload), exactQuote: termDraft.exactQuote },
+          { effectiveDate: effDate }
+        ).calculatedDate
+      : null;
+
     // Create extracted items for new version
     await Promise.all(
       newDraftsWithId.map(async (draft) => {
@@ -162,18 +180,33 @@ export async function versionRoutes(app: FastifyInstance) {
         if (isCarriedOver) carriedOverCount++;
         else newItemsCount++;
 
+        const priorFull = matchInfo?.priorItem
+          ? priorApprovedItems.find((p) => p.id === matchInfo.priorItem!.id)
+          : null;
+
         const reviewStatus = isCarriedOver
-          ? matchInfo?.priorItem?.userEdited
+          ? priorFull?.userEdited
             ? "edited_approved"
             : "approved"
           : "pending";
 
         const currentValue =
-          isCarriedOver && matchInfo?.priorItem
-            ? matchInfo.priorItem.currentValue
+          isCarriedOver && priorFull
+            ? priorFull.currentValue
             : JSON.stringify(draft.originalPayload);
 
-        const userEdited = isCarriedOver ? !!matchInfo?.priorItem?.userEdited : false;
+        const userEdited = isCarriedOver ? !!priorFull?.userEdited : false;
+
+        const dateRes = resolveItemCalculatedDate(
+          {
+            itemType: draft.itemType,
+            currentValue,
+            exactQuote: draft.exactQuote,
+            calculatedDate: isCarriedOver ? priorFull?.calculatedDate : null,
+            manualDateOverride: isCarriedOver ? priorFull?.manualDateOverride : null,
+          },
+          { effectiveDate: effDate, expiryDate: expDate }
+        );
 
         return prisma.extractedItem.create({
           data: {
@@ -192,6 +225,10 @@ export async function versionRoutes(app: FastifyInstance) {
             userEdited,
             originalValue: JSON.stringify(draft.originalPayload),
             currentValue,
+            calculatedDate: dateRes.calculatedDate,
+            manualDateOverride: isCarriedOver ? priorFull?.manualDateOverride || null : null,
+            dateResolutionStatus: dateRes.status,
+            dateResolutionReason: dateRes.reason || null,
           },
         });
       })

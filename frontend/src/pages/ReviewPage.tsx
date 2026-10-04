@@ -90,18 +90,18 @@ export const ReviewPage: React.FC = () => {
 
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
 
-  const loadData = async (targetVersion?: number) => {
+  const loadData = async (targetVersion?: number, silent = false) => {
     if (!id) return;
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const res = await getContract(id, targetVersion);
       setData(res);
       setSelectedVersion(res.activeVersion.versionNumber);
       setError(null);
     } catch (err: any) {
-      setError(err.message || "Failed to load contract");
+      if (!silent) setError(err.message || "Failed to load contract");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -123,14 +123,50 @@ export const ReviewPage: React.FC = () => {
 
   const handleApprove = async (item: ExtractedItem) => {
     if (!id) return;
-    await reviewItem(id, item.id, "approve");
-    loadData(selectedVersion || undefined);
+    // Optimistic in-place update for instant UI response with no page reloading
+    setData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        activeVersion: {
+          ...prev.activeVersion,
+          extractedItems: prev.activeVersion.extractedItems.map((it) =>
+            it.id === item.id ? { ...it, reviewStatus: it.userEdited ? "edited_approved" : "approved" } : it
+          ),
+        },
+      };
+    });
+    try {
+      await reviewItem(id, item.id, "approve");
+      await loadData(selectedVersion || undefined, true);
+    } catch (err: any) {
+      alert(err.message || "Failed to approve item");
+      await loadData(selectedVersion || undefined, true);
+    }
   };
 
   const handleReject = async (item: ExtractedItem) => {
     if (!id) return;
-    await reviewItem(id, item.id, "reject");
-    loadData(selectedVersion || undefined);
+    // Optimistic in-place update
+    setData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        activeVersion: {
+          ...prev.activeVersion,
+          extractedItems: prev.activeVersion.extractedItems.map((it) =>
+            it.id === item.id ? { ...it, reviewStatus: "rejected" } : it
+          ),
+        },
+      };
+    });
+    try {
+      await reviewItem(id, item.id, "reject");
+      await loadData(selectedVersion || undefined, true);
+    } catch (err: any) {
+      alert(err.message || "Failed to reject item");
+      await loadData(selectedVersion || undefined, true);
+    }
   };
 
   const handleResolveStale = async (itemId: string, action: "reconfirm" | "dismiss") => {
@@ -144,7 +180,7 @@ export const ReviewPage: React.FC = () => {
         delete next[itemId];
         return next;
       });
-      loadData(selectedVersion || undefined);
+      await loadData(selectedVersion || undefined, true);
     } catch (err: any) {
       alert(err?.message || "Failed to resolve stale item");
     } finally {
@@ -167,7 +203,7 @@ export const ReviewPage: React.FC = () => {
     try {
       setIsRetryingStep(true);
       await retryExtractionStep(id, stepName);
-      await loadData(selectedVersion || undefined);
+      await loadData(selectedVersion || undefined, true);
     } catch (err: any) {
       alert(err?.message || `Failed to retry step ${stepName}`);
     } finally {
@@ -183,25 +219,81 @@ export const ReviewPage: React.FC = () => {
 
   const saveEdit = async (item: ExtractedItem) => {
     if (!id) return;
-    await reviewItem(id, item.id, "edit", editText, editNote);
+    const edited = editText;
     setEditingItemId(null);
-    loadData(selectedVersion || undefined);
+    setData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        activeVersion: {
+          ...prev.activeVersion,
+          extractedItems: prev.activeVersion.extractedItems.map((it) =>
+            it.id === item.id
+              ? {
+                  ...it,
+                  currentValue: edited,
+                  userEdited: true,
+                  reviewStatus: "edited_approved",
+                }
+              : it
+          ),
+        },
+      };
+    });
+    try {
+      await reviewItem(id, item.id, "edit", edited, editNote);
+      await loadData(selectedVersion || undefined, true);
+    } catch (err: any) {
+      alert(err.message || "Failed to save edit");
+      await loadData(selectedVersion || undefined, true);
+    }
   };
 
   const saveQuestionAnswer = async (item: ExtractedItem) => {
     if (!id) return;
-    await reviewItem(id, item.id, "answer_question", questionAnswer);
+    const ans = questionAnswer;
     setAnsweringQuestionId(null);
     setQuestionAnswer("");
-    loadData(selectedVersion || undefined);
+    try {
+      await reviewItem(id, item.id, "answer_question", ans);
+      await loadData(selectedVersion || undefined, true);
+    } catch (err: any) {
+      alert(err.message || "Failed to save question answer");
+      await loadData(selectedVersion || undefined, true);
+    }
   };
 
-  const saveDateOverride = async (item: ExtractedItem) => {
+  const saveDateOverride = async (item: ExtractedItem, dateValToSave?: string) => {
     if (!id) return;
-    await reviewItem(id, item.id, "override_date", newDateVal);
+    const finalDate = dateValToSave !== undefined ? dateValToSave : newDateVal;
+    // Optimistic in-place update so date changes with 0ms delay
+    setData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        activeVersion: {
+          ...prev.activeVersion,
+          extractedItems: prev.activeVersion.extractedItems.map((it) =>
+            it.id === item.id
+              ? {
+                  ...it,
+                  manualDateOverride: finalDate === "reset" ? null : finalDate,
+                  dateResolutionReason: finalDate === "reset" ? "Calculated deadline restored" : "Manually overridden by reviewer",
+                }
+              : it
+          ),
+        },
+      };
+    });
     setOverridingDateId(null);
     setNewDateVal("");
-    loadData(selectedVersion || undefined);
+    try {
+      await reviewItem(id, item.id, "override_date", finalDate);
+      await loadData(selectedVersion || undefined, true);
+    } catch (err: any) {
+      alert(err.message || "Failed to save date override");
+      await loadData(selectedVersion || undefined, true);
+    }
   };
 
   const handleBulkApprove = async () => {
@@ -213,11 +305,31 @@ export const ReviewPage: React.FC = () => {
 
     if (eligibleItems.length === 0) return;
 
-    await bulkApproveItems(
-      id,
-      eligibleItems.map((i) => i.id)
-    );
-    loadData(selectedVersion || undefined);
+    // Optimistic update
+    setData((prev) => {
+      if (!prev) return prev;
+      const eligibleIds = new Set(eligibleItems.map((i) => i.id));
+      return {
+        ...prev,
+        activeVersion: {
+          ...prev.activeVersion,
+          extractedItems: prev.activeVersion.extractedItems.map((it) =>
+            eligibleIds.has(it.id) ? { ...it, reviewStatus: it.userEdited ? "edited_approved" : "approved" } : it
+          ),
+        },
+      };
+    });
+
+    try {
+      await bulkApproveItems(
+        id,
+        eligibleItems.map((i) => i.id)
+      );
+      await loadData(selectedVersion || undefined, true);
+    } catch (err: any) {
+      alert(err.message || "Bulk approval failed");
+      await loadData(selectedVersion || undefined, true);
+    }
   };
 
   const viewAuditLog = async () => {
@@ -240,7 +352,7 @@ export const ReviewPage: React.FC = () => {
     }
   };
 
-  if (loading) {
+  if (loading && !data) {
     return (
       <div className="flex-1 flex items-center justify-center p-12">
         <div className="text-center">
@@ -766,54 +878,141 @@ export const ReviewPage: React.FC = () => {
                     </div>
 
                     {/* Calculated Dates & Override Box */}
-                    {item.calculatedDate && (
-                      <div className="mt-3.5 p-3 bg-gradient-to-r from-sky-50/50 to-slate-50 border border-sky-100/80 rounded-xl flex items-center justify-between text-xs shadow-2xs">
+                    {(item.calculatedDate || item.manualDateOverride) && (
+                      <div
+                        className={`mt-3.5 p-3 rounded-xl border flex flex-wrap items-center justify-between gap-3 text-xs shadow-2xs ${
+                          item.manualDateOverride
+                            ? "bg-gradient-to-r from-amber-50/60 to-slate-50 border-amber-200/90"
+                            : "bg-gradient-to-r from-sky-50/50 to-slate-50 border-sky-100/80"
+                        }`}
+                      >
                         <div className="flex items-center space-x-2.5">
-                          <Calendar className="w-4 h-4 text-sky-600 shrink-0" />
+                          <Calendar
+                            className={`w-4 h-4 shrink-0 ${
+                              item.manualDateOverride ? "text-amber-600" : "text-sky-600"
+                            }`}
+                          />
                           <div>
-                            <span className="font-semibold text-slate-600">Calculated Deadline: </span>
-                            <span className="font-mono text-slate-900 font-bold bg-white px-2 py-0.5 rounded border border-slate-200/70 ml-1">
-                              {new Date(item.calculatedDate).toLocaleDateString()}
-                            </span>
-                            {item.dateResolutionReason && (
-                              <span className="text-[11px] text-slate-400 block mt-0.5">
-                                {item.dateResolutionReason}
-                              </span>
+                            {item.manualDateOverride ? (
+                              <div className="flex items-center flex-wrap gap-1.5">
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-300/80">
+                                  Manual Override
+                                </span>
+                                <span className="font-semibold text-slate-700">Active Date:</span>
+                                <span className="font-mono text-slate-900 font-bold bg-white px-2 py-0.5 rounded border border-amber-300 shadow-2xs">
+                                  {item.manualDateOverride}
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center flex-wrap gap-1.5">
+                                <span className="font-semibold text-slate-600">Calculated Deadline:</span>
+                                <span className="font-mono text-slate-900 font-bold bg-white px-2 py-0.5 rounded border border-slate-200/70 shadow-2xs">
+                                  {item.calculatedDate}
+                                </span>
+                              </div>
                             )}
+
+                            <div className="text-[11px] text-slate-500 mt-1 flex items-center flex-wrap gap-x-2">
+                              {item.manualDateOverride && item.calculatedDate && (
+                                <span className="text-slate-500">
+                                  (Calculated from clause: <strong className="font-mono font-semibold text-slate-700">{item.calculatedDate}</strong>)
+                                </span>
+                              )}
+                              {item.dateResolutionReason && (
+                                <span>{item.dateResolutionReason}</span>
+                              )}
+                            </div>
                           </div>
                         </div>
 
                         {isOverridingDate ? (
-                          <div className="flex items-center space-x-2">
-                            <input
-                              type="date"
-                              value={newDateVal}
-                              onChange={(e) => setNewDateVal(e.target.value)}
-                              className="p-1.5 border border-slate-300 rounded-xl text-xs bg-white focus:ring-2 focus:ring-sky-500 focus:outline-none"
-                            />
-                            <button
-                              onClick={() => saveDateOverride(item)}
-                              className="px-3 py-1.5 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow-xs active:scale-95 transition-all"
-                            >
-                              Save
-                            </button>
-                            <button
-                              onClick={() => setOverridingDateId(null)}
-                              className="px-3 py-1.5 border border-slate-300 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-100 transition-colors"
-                            >
-                              Cancel
-                            </button>
+                          <div className="flex flex-col sm:flex-row sm:items-center flex-wrap gap-2">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="date"
+                                value={newDateVal}
+                                onChange={(e) => setNewDateVal(e.target.value)}
+                                className="p-1.5 border border-slate-300 rounded-xl text-xs bg-white focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                              />
+                              <button
+                                onClick={() => saveDateOverride(item)}
+                                disabled={!newDateVal}
+                                className="px-3 py-1.5 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-xs active:scale-95 transition-all"
+                              >
+                                Save
+                              </button>
+                              {item.manualDateOverride && (
+                                <button
+                                  onClick={() => saveDateOverride(item, "reset")}
+                                  title="Remove manual override and restore clause calculated date"
+                                  className="px-2.5 py-1.5 border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 rounded-xl text-xs font-semibold transition-colors"
+                                >
+                                  Reset to Calculated
+                                </button>
+                              )}
+                              <button
+                                onClick={() => setOverridingDateId(null)}
+                                className="px-2.5 py-1.5 border border-slate-300 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-100 transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                            {newDateVal && (() => {
+                              try {
+                                const target = new Date(newDateVal + "T00:00:00Z");
+                                const now = new Date();
+                                const todayUTC = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+                                const diffDays = Math.round((target.getTime() - todayUTC.getTime()) / (1000 * 60 * 60 * 24));
+                                if (diffDays < 0) {
+                                  return (
+                                    <span className="text-[11px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200">
+                                      {Math.abs(diffDays)}d in the past (Overdue)
+                                    </span>
+                                  );
+                                } else if (diffDays === 0) {
+                                  return (
+                                    <span className="text-[11px] font-bold text-rose-700 bg-rose-100 px-2 py-0.5 rounded-md border border-rose-300">
+                                      Due Today
+                                    </span>
+                                  );
+                                } else if (diffDays <= 14) {
+                                  return (
+                                    <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                                      {diffDays}d left (Due Soon &le; 14 Days)
+                                    </span>
+                                  );
+                                } else {
+                                  return (
+                                    <span className="text-[11px] font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-md border border-sky-200">
+                                      {diffDays}d left (Upcoming)
+                                    </span>
+                                  );
+                                }
+                              } catch {
+                                return null;
+                              }
+                            })()}
                           </div>
                         ) : (
-                          <button
-                            onClick={() => {
-                              setOverridingDateId(item.id);
-                              setNewDateVal(item.calculatedDate?.split("T")[0] || "");
-                            }}
-                            className="text-xs font-bold text-sky-600 hover:text-sky-800 hover:underline px-2.5 py-1 rounded-lg hover:bg-sky-50/80 transition-colors"
-                          >
-                            Override Date
-                          </button>
+                          <div className="flex items-center space-x-1.5">
+                            <button
+                              onClick={() => {
+                                setOverridingDateId(item.id);
+                                setNewDateVal(item.manualDateOverride || item.calculatedDate || "");
+                              }}
+                              className="text-xs font-bold text-sky-600 hover:text-sky-800 hover:underline px-2.5 py-1 rounded-lg hover:bg-sky-50/80 transition-colors"
+                            >
+                              {item.manualDateOverride ? "Change Date" : "Override Date"}
+                            </button>
+                            {item.manualDateOverride && (
+                              <button
+                                onClick={() => saveDateOverride(item, "reset")}
+                                className="text-[11px] font-semibold text-slate-400 hover:text-rose-600 px-1.5 py-1 rounded hover:bg-rose-50 transition-colors"
+                              >
+                                Reset
+                              </button>
+                            )}
+                          </div>
                         )}
                       </div>
                     )}

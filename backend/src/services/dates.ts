@@ -393,3 +393,228 @@ export function applyManualOverride(
     reason: reason || "Manually overridden by reviewer",
   };
 }
+
+const WORD_TO_NUMBER: Record<string, number> = {
+  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  eleven: 11, twelve: 12, eighteen: 18, twenty: 20, "twenty-four": 24, "twenty four": 24,
+  thirty: 30, forty: 40, "forty-five": 45, "forty five": 45, sixty: 60, ninety: 90,
+  "one hundred": 100, "one hundred twenty": 120, "120": 120,
+};
+
+export function parseNumberFromText(text: string): number | null {
+  if (!text) return null;
+  const parenMatch = text.match(/\((\d+)\)/);
+  if (parenMatch && parenMatch[1]) {
+    return parseInt(parenMatch[1], 10);
+  }
+  const digitMatch = text.match(/\b(\d+)\b/);
+  if (digitMatch && digitMatch[1]) {
+    return parseInt(digitMatch[1], 10);
+  }
+  for (const [word, num] of Object.entries(WORD_TO_NUMBER)) {
+    const rx = new RegExp(`\\b${word}\\b`, "i");
+    if (rx.test(text)) {
+      return num;
+    }
+  }
+  return null;
+}
+
+export function extractTermFromText(text: string): { months?: number; years?: number } | null {
+  if (!text) return null;
+  const normalized = text.toLowerCase();
+  
+  const monthMatch = normalized.match(/([a-z0-9-]+(?:\s*\(\d+\))?)\s+months?/i);
+  if (monthMatch && monthMatch[1]) {
+    const num = parseNumberFromText(monthMatch[1]);
+    if (num && num > 0) return { months: num };
+  }
+
+  const yearMatch = normalized.match(/([a-z0-9-]+(?:\s*\(\d+\))?)\s+years?/i);
+  if (yearMatch && yearMatch[1]) {
+    const num = parseNumberFromText(yearMatch[1]);
+    if (num && num > 0) return { years: num };
+  }
+
+  return null;
+}
+
+export function extractNoticeDaysFromText(text: string): number | null {
+  if (!text) return null;
+  const normalized = text.toLowerCase();
+  const match = normalized.match(/([a-z0-9-]+(?:\s*\(\d+\))?)\s+days?(?:\s+prior|\s+in advance|\s+before|\s+written notice)?/i);
+  if (match && match[1]) {
+    const num = parseNumberFromText(match[1]);
+    if (num && num > 0) return num;
+  }
+  return null;
+}
+
+export interface ResolvableItem {
+  id?: string;
+  itemType: string;
+  currentValue?: string | null;
+  originalValue?: string | null;
+  exactQuote?: string | null;
+  calculatedDate?: string | null;
+  manualDateOverride?: string | null;
+}
+
+/**
+ * Deterministically resolves the target operational or compliance date for an extracted contract item.
+ */
+export function resolveItemCalculatedDate(
+  item: ResolvableItem,
+  context: { effectiveDate?: string | null; expiryDate?: string | null }
+): {
+  calculatedDate: string | null;
+  status: "resolved" | "needs_input" | "not_applicable";
+  reason?: string;
+} {
+  if (item.manualDateOverride && isValidDateString(item.manualDateOverride)) {
+    return { calculatedDate: item.manualDateOverride, status: "resolved" };
+  }
+  if (item.calculatedDate && isValidDateString(item.calculatedDate)) {
+    return { calculatedDate: item.calculatedDate, status: "resolved" };
+  }
+
+  let payload: Record<string, unknown> = {};
+  try {
+    const raw = item.currentValue || item.originalValue;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") payload = parsed as Record<string, unknown>;
+    }
+  } catch {
+    payload = {};
+  }
+
+  const quote = (item.exactQuote || (typeof payload.exactQuote === "string" ? payload.exactQuote : "") || "").trim();
+
+  // 1. Effective date
+  if (item.itemType === "effective_date") {
+    const dateVal = typeof payload.date === "string" ? payload.date : null;
+    if (dateVal && isValidDateString(dateVal)) {
+      return { calculatedDate: dateVal, status: "resolved" };
+    }
+    // Try YYYY-MM-DD in quote
+    const isoMatch = quote.match(/\b(\d{4}-\d{2}-\d{2})\b/);
+    if (isoMatch && isoMatch[1] && isValidDateString(isoMatch[1])) {
+      return { calculatedDate: isoMatch[1], status: "resolved" };
+    }
+    return { status: "needs_input", calculatedDate: null, reason: "Effective date could not be parsed." };
+  }
+
+  // 2. Expiry / Term
+  if (item.itemType === "expiry" || item.itemType === "term") {
+    const exactExpiry = typeof payload.expiryDate === "string" && isValidDateString(payload.expiryDate) ? payload.expiryDate : null;
+    if (exactExpiry) {
+      return { calculatedDate: exactExpiry, status: "resolved" };
+    }
+
+    const effDate = context.effectiveDate;
+    if (!effDate || !isValidDateString(effDate)) {
+      return { status: "needs_input", calculatedDate: null, reason: "Missing effective date to compute expiry." };
+    }
+
+    const termMonths =
+      typeof payload.termLengthMonths === "number" ? payload.termLengthMonths :
+      typeof payload.termMonths === "number" ? payload.termMonths :
+      typeof payload.durationMonths === "number" ? payload.durationMonths : null;
+
+    const termYears =
+      typeof payload.termLengthYears === "number" ? payload.termLengthYears :
+      typeof payload.termYears === "number" ? payload.termYears :
+      typeof payload.durationYears === "number" ? payload.durationYears : null;
+
+    if (termMonths || termYears) {
+      const expRes = computeExpiryDate({ effectiveDate: effDate, termMonths, termYears });
+      if (expRes.status === "resolved") {
+        return { calculatedDate: expRes.date, status: "resolved" };
+      }
+    }
+
+    // Try text quote extraction
+    const extracted = extractTermFromText(quote);
+    if (extracted && (extracted.months || extracted.years)) {
+      const expRes = computeExpiryDate({
+        effectiveDate: effDate,
+        termMonths: extracted.months,
+        termYears: extracted.years,
+      });
+      if (expRes.status === "resolved") {
+        return { calculatedDate: expRes.date, status: "resolved" };
+      }
+    }
+
+    return { status: "needs_input", calculatedDate: null, reason: "Term length or expiry date not specified." };
+  }
+
+  // 3. Renewal / Notice
+  if (item.itemType === "renewal" || item.itemType === "notice") {
+    const expDate = context.expiryDate;
+    if (!expDate || !isValidDateString(expDate)) {
+      return { status: "needs_input", calculatedDate: null, reason: "Expiry date is required to compute non-renewal notice deadline." };
+    }
+
+    const noticeDays =
+      typeof payload.noticePeriodDays === "number" ? payload.noticePeriodDays :
+      typeof payload.noticeDays === "number" ? payload.noticeDays : null;
+    const noticeMonths =
+      typeof payload.noticePeriodMonths === "number" ? payload.noticePeriodMonths :
+      typeof payload.noticeMonths === "number" ? payload.noticeMonths : null;
+
+    if (noticeDays || noticeMonths) {
+      const notRes = computeNoticeDeadline({ expiryDate: expDate, noticeDays, noticeMonths });
+      if (notRes.status === "resolved") {
+        return { calculatedDate: notRes.date, status: "resolved" };
+      }
+    }
+
+    // Try text quote extraction
+    const extractedDays = extractNoticeDaysFromText(quote);
+    if (extractedDays && extractedDays > 0) {
+      const notRes = computeNoticeDeadline({ expiryDate: expDate, noticeDays: extractedDays });
+      if (notRes.status === "resolved") {
+        return { calculatedDate: notRes.date, status: "resolved" };
+      }
+    }
+
+    return { status: "needs_input", calculatedDate: null, reason: "Notice period not specified." };
+  }
+
+  // 4. Obligations
+  if (item.itemType === "obligation") {
+    const explicitDeadline = typeof payload.deadlineDate === "string" && isValidDateString(payload.deadlineDate) ? payload.deadlineDate : null;
+    if (explicitDeadline) {
+      return { calculatedDate: explicitDeadline, status: "resolved" };
+    }
+
+    const relDeadline = typeof payload.relativeDeadline === "string" ? payload.relativeDeadline : null;
+    if (relDeadline) {
+      const relRes = resolveRelativeDeadline(relDeadline, {
+        effectiveDate: context.effectiveDate,
+        expiryDate: context.expiryDate,
+      });
+      if (relRes.status === "resolved") {
+        return { calculatedDate: relRes.date, status: "resolved" };
+      }
+    }
+
+    // Try quote text for relative deadline
+    if (quote) {
+      const relRes = resolveRelativeDeadline(quote, {
+        effectiveDate: context.effectiveDate,
+        expiryDate: context.expiryDate,
+      });
+      if (relRes.status === "resolved") {
+        return { calculatedDate: relRes.date, status: "resolved" };
+      }
+    }
+
+    return { status: "needs_input", calculatedDate: null, reason: "No concrete or relative deadline specified." };
+  }
+
+  return { status: "not_applicable", calculatedDate: null };
+}
+

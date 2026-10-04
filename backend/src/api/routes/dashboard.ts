@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../../models/prisma.js";
 import { format, parseISO, differenceInDays } from "date-fns";
+import { resolveItemCalculatedDate } from "../../services/dates.js";
 
 export interface DashboardDeadlineItem {
   id: string;
@@ -53,8 +54,49 @@ export async function dashboardRoutes(app: FastifyInstance) {
       const activeVer = contract.versions[0];
       if (!activeVer) continue;
 
+      // Deterministically find effective date and expiry date for this version
+      let effDate: string | null = null;
+      const effItem = activeVer.extractedItems.find((i) => i.itemType === "effective_date");
+      if (effItem) {
+        const res = resolveItemCalculatedDate(effItem, {});
+        if (res.calculatedDate) {
+          effDate = res.calculatedDate;
+          if (!effItem.calculatedDate) {
+            await prisma.extractedItem.update({
+              where: { id: effItem.id },
+              data: { calculatedDate: effDate, dateResolutionStatus: "resolved" },
+            }).catch(() => {});
+          }
+        }
+      }
+
+      let expDate: string | null = null;
+      const expItem = activeVer.extractedItems.find((i) => i.itemType === "expiry" || i.itemType === "term");
+      if (expItem) {
+        const res = resolveItemCalculatedDate(expItem, { effectiveDate: effDate });
+        if (res.calculatedDate) {
+          expDate = res.calculatedDate;
+          if (!expItem.calculatedDate) {
+            await prisma.extractedItem.update({
+              where: { id: expItem.id },
+              data: { calculatedDate: expDate, dateResolutionStatus: "resolved" },
+            }).catch(() => {});
+          }
+        }
+      }
+
       for (const item of activeVer.extractedItems) {
-        const targetDate = item.manualDateOverride || item.calculatedDate;
+        let targetDate = item.manualDateOverride || item.calculatedDate;
+        if (!targetDate) {
+          const res = resolveItemCalculatedDate(item, { effectiveDate: effDate, expiryDate: expDate });
+          if (res.calculatedDate) {
+            targetDate = res.calculatedDate;
+            await prisma.extractedItem.update({
+              where: { id: item.id },
+              data: { calculatedDate: targetDate, dateResolutionStatus: res.status },
+            }).catch(() => {});
+          }
+        }
         if (!targetDate) continue;
 
         let payload: Record<string, unknown> = {};
