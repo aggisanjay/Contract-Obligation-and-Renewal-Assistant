@@ -8,19 +8,33 @@ import { z } from "zod";
  */
 
 export const ExtractedAmbiguitySchema = z.object({
-  issueType: z.enum(["unclear_term", "missing_data", "internal_contradiction", "policy_gap"]),
-  description: z.string(),
+  issueType: z
+    .string()
+    .nullish()
+    .transform((val) => {
+      const v = String(val || "").toLowerCase();
+      if (["unclear_term", "missing_data", "internal_contradiction", "policy_gap"].includes(v)) {
+        return v as any;
+      }
+      return "unclear_term";
+    }),
+  description: z.any().transform((v) => {
+    if (!v) return "Ambiguous or contradictory clause";
+    if (typeof v === "string") return v;
+    if (typeof v === "object") return v.description || v.issue || v.text || JSON.stringify(v);
+    return String(v);
+  }),
   conflictingSectionLabel: z.string().nullish(),
   policyReference: z.string().nullish(),
-  sourceSectionLabel: z.string(),
-  exactQuote: z.string(),
-  confidence: z.number().min(0).max(1),
-  status: z.enum(["confirmed", "uncertain"]).default("uncertain"),
+  sourceSectionLabel: z.string().nullish().default("General"),
+  exactQuote: z.string().nullish().default(""),
+  confidence: z.number().min(0).max(1).nullish().default(0.85),
+  status: z.enum(["confirmed", "uncertain"]).nullish().default("uncertain"),
   uncertaintyReason: z.string().nullish(),
 });
 
 export const ExtractedAmbiguitiesResponseSchema = z.object({
-  ambiguitiesAndConflicts: z.array(ExtractedAmbiguitySchema),
+  ambiguitiesAndConflicts: z.array(ExtractedAmbiguitySchema).nullish().transform((v) => v || []),
 });
 
 export type ExtractedAmbiguitiesResponse = z.infer<typeof ExtractedAmbiguitiesResponseSchema>;

@@ -8,17 +8,22 @@ import { z } from "zod";
  */
 
 export const ExtractedClarificationQuestionSchema = z.object({
-  question: z.string(),
-  targetClause: z.string(),
-  sourceSectionLabel: z.string(),
-  exactQuote: z.string(),
-  confidence: z.number().min(0).max(1),
-  status: z.enum(["confirmed", "uncertain"]).default("uncertain"),
+  question: z.any().transform((v) => {
+    if (!v) return "Clarification needed on clause";
+    if (typeof v === "string") return v;
+    if (typeof v === "object") return v.question || v.text || JSON.stringify(v);
+    return String(v);
+  }),
+  targetClause: z.string().nullish().default("Contract clause"),
+  sourceSectionLabel: z.string().nullish().default("General"),
+  exactQuote: z.string().nullish().default(""),
+  confidence: z.number().min(0).max(1).nullish().default(0.9),
+  status: z.enum(["confirmed", "uncertain"]).nullish().default("uncertain"),
   uncertaintyReason: z.string().nullish(),
 });
 
 export const ExtractedClarificationQuestionsResponseSchema = z.object({
-  clarificationQuestions: z.array(ExtractedClarificationQuestionSchema),
+  clarificationQuestions: z.array(ExtractedClarificationQuestionSchema).nullish().transform((v) => v || []),
 });
 
 export type ExtractedClarificationQuestionsResponse = z.infer<

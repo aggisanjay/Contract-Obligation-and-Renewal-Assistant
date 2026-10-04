@@ -12,63 +12,64 @@ import { z } from "zod";
 export const ExtractedTermRenewalResponseSchema = z.object({
   term: z
     .object({
-      termLengthMonths: z.number().nullable().optional(),
-      termLengthYears: z.number().nullable().optional(),
-      expiryDate: z.string().nullable().optional(),
-      isPerpetual: z.boolean().default(false),
-      description: z.string(),
-      sourceSectionLabel: z.string(),
-      exactQuote: z.string(),
-      confidence: z.number().min(0).max(1),
-      status: z.enum(["confirmed", "uncertain"]),
-      uncertaintyReason: z.string().nullable().optional(),
+      termLengthMonths: z.number().nullish(),
+      termLengthYears: z.number().nullish(),
+      expiryDate: z.any().nullish().transform((val) => {
+        if (!val) return null;
+        if (typeof val === "string") return val;
+        if (typeof val === "object") return val.date || val.value || String(val);
+        return String(val);
+      }),
+      isPerpetual: z.boolean().nullish().default(false),
+      description: z.string().nullish().default(""),
+      sourceSectionLabel: z.string().nullish().default("General"),
+      exactQuote: z.string().nullish().default(""),
+      confidence: z.number().min(0).max(1).nullish().default(0.9),
+      status: z.enum(["confirmed", "uncertain"]).nullish().default("confirmed"),
+      uncertaintyReason: z.string().nullish(),
     })
-    .nullable()
-    .optional(),
+    .nullish(),
   renewal: z
     .object({
-      isAutoRenew: z.boolean(),
-      renewalTermMonths: z.number().nullable().optional(),
-      noticePeriodDays: z.number().nullable().optional(),
-      noticePeriodMonths: z.number().nullable().optional(),
+      isAutoRenew: z.boolean().nullish().default(false),
+      renewalTermMonths: z.number().nullish(),
+      noticePeriodDays: z.number().nullish(),
+      noticePeriodMonths: z.number().nullish(),
       conditions: z.string().nullish(),
-      sourceSectionLabel: z.string(),
-      exactQuote: z.string(),
-      confidence: z.number().min(0).max(1),
-      status: z.enum(["confirmed", "uncertain"]),
+      sourceSectionLabel: z.string().nullish().default("General"),
+      exactQuote: z.string().nullish().default(""),
+      confidence: z.number().min(0).max(1).nullish().default(0.9),
+      status: z.enum(["confirmed", "uncertain"]).nullish().default("confirmed"),
       uncertaintyReason: z.string().nullish(),
     })
-    .nullable()
-    .optional(),
+    .nullish(),
   termination: z
     .object({
-      forCauseAllowed: z.boolean(),
-      forConvenienceAllowed: z.boolean(),
+      forCauseAllowed: z.boolean().nullish().default(false),
+      forConvenienceAllowed: z.boolean().nullish().default(false),
       noticePeriodDays: z.number().nullish(),
       curePeriodDays: z.number().nullish(),
-      summary: z.string(),
-      sourceSectionLabel: z.string(),
-      exactQuote: z.string(),
-      confidence: z.number().min(0).max(1),
-      status: z.enum(["confirmed", "uncertain"]),
+      summary: z.string().nullish().default(""),
+      sourceSectionLabel: z.string().nullish().default("General"),
+      exactQuote: z.string().nullish().default(""),
+      confidence: z.number().min(0).max(1).nullish().default(0.9),
+      status: z.enum(["confirmed", "uncertain"]).nullish().default("confirmed"),
       uncertaintyReason: z.string().nullish(),
     })
-    .nullable()
-    .optional(),
+    .nullish(),
   notice: z
     .object({
       noticePeriodDays: z.number().nullish(),
       noticePeriodMonths: z.number().nullish(),
       method: z.string().nullish(),
       recipient: z.string().nullish(),
-      sourceSectionLabel: z.string(),
-      exactQuote: z.string(),
-      confidence: z.number().min(0).max(1),
-      status: z.enum(["confirmed", "uncertain"]),
-      uncertaintyReason: z.string().nullable().optional(),
+      sourceSectionLabel: z.string().nullish().default("General"),
+      exactQuote: z.string().nullish().default(""),
+      confidence: z.number().min(0).max(1).nullish().default(0.9),
+      status: z.enum(["confirmed", "uncertain"]).nullish().default("confirmed"),
+      uncertaintyReason: z.string().nullish(),
     })
-    .nullable()
-    .optional(),
+    .nullish(),
 });
 
 export type ExtractedTermRenewalResponse = z.infer<typeof ExtractedTermRenewalResponseSchema>;

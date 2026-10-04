@@ -176,16 +176,16 @@ export async function runExtractionPipeline(
     );
 
     if (result.term) {
-      const sec = findSection(result.term.sourceSectionLabel);
+      const sec = findSection(result.term.sourceSectionLabel || "General");
       rawDrafts.push({
         itemType: "expiry",
-        status: result.term.status,
-        confidence: result.term.confidence,
+        status: (result.term.status as "confirmed" | "uncertain") || "confirmed",
+        confidence: typeof result.term.confidence === "number" ? result.term.confidence : 0.9,
         uncertaintyReason: result.term.uncertaintyReason || null,
-        sourceSectionLabel: result.term.sourceSectionLabel,
+        sourceSectionLabel: result.term.sourceSectionLabel || "General",
         sourceSectionId: sec?.id || null,
         page: sec?.page || null,
-        exactQuote: result.term.exactQuote,
+        exactQuote: result.term.exactQuote || "",
         citationVerified: true,
         citationWarning: null,
         originalPayload: result.term,
@@ -193,16 +193,16 @@ export async function runExtractionPipeline(
     }
 
     if (result.renewal) {
-      const sec = findSection(result.renewal.sourceSectionLabel);
+      const sec = findSection(result.renewal.sourceSectionLabel || "General");
       rawDrafts.push({
         itemType: "renewal",
-        status: result.renewal.status,
-        confidence: result.renewal.confidence,
+        status: (result.renewal.status as "confirmed" | "uncertain") || "confirmed",
+        confidence: typeof result.renewal.confidence === "number" ? result.renewal.confidence : 0.9,
         uncertaintyReason: result.renewal.uncertaintyReason || null,
-        sourceSectionLabel: result.renewal.sourceSectionLabel,
+        sourceSectionLabel: result.renewal.sourceSectionLabel || "General",
         sourceSectionId: sec?.id || null,
         page: sec?.page || null,
-        exactQuote: result.renewal.exactQuote,
+        exactQuote: result.renewal.exactQuote || "",
         citationVerified: true,
         citationWarning: null,
         originalPayload: result.renewal,
@@ -210,16 +210,16 @@ export async function runExtractionPipeline(
     }
 
     if (result.termination) {
-      const sec = findSection(result.termination.sourceSectionLabel);
+      const sec = findSection(result.termination.sourceSectionLabel || "General");
       rawDrafts.push({
         itemType: "termination",
-        status: result.termination.status,
-        confidence: result.termination.confidence,
+        status: (result.termination.status as "confirmed" | "uncertain") || "confirmed",
+        confidence: typeof result.termination.confidence === "number" ? result.termination.confidence : 0.9,
         uncertaintyReason: result.termination.uncertaintyReason || null,
-        sourceSectionLabel: result.termination.sourceSectionLabel,
+        sourceSectionLabel: result.termination.sourceSectionLabel || "General",
         sourceSectionId: sec?.id || null,
         page: sec?.page || null,
-        exactQuote: result.termination.exactQuote,
+        exactQuote: result.termination.exactQuote || "",
         citationVerified: true,
         citationWarning: null,
         originalPayload: result.termination,
@@ -227,16 +227,16 @@ export async function runExtractionPipeline(
     }
 
     if (result.notice) {
-      const sec = findSection(result.notice.sourceSectionLabel);
+      const sec = findSection(result.notice.sourceSectionLabel || "General");
       rawDrafts.push({
         itemType: "notice",
-        status: result.notice.status,
-        confidence: result.notice.confidence,
+        status: (result.notice.status as "confirmed" | "uncertain") || "confirmed",
+        confidence: typeof result.notice.confidence === "number" ? result.notice.confidence : 0.9,
         uncertaintyReason: result.notice.uncertaintyReason || null,
-        sourceSectionLabel: result.notice.sourceSectionLabel,
+        sourceSectionLabel: result.notice.sourceSectionLabel || "General",
         sourceSectionId: sec?.id || null,
         page: sec?.page || null,
-        exactQuote: result.notice.exactQuote,
+        exactQuote: result.notice.exactQuote || "",
         citationVerified: true,
         citationWarning: null,
         originalPayload: result.notice,
@@ -270,17 +270,18 @@ export async function runExtractionPipeline(
       { requestId, stepName: "obligations" }
     );
 
-    for (const ob of result.obligations) {
-      const sec = findSection(ob.sourceSectionLabel);
+    const obligations = (result.obligations || []) as any[];
+    for (const ob of obligations) {
+      const sec = findSection(ob.sourceSectionLabel || "General");
       rawDrafts.push({
         itemType: "obligation",
-        status: ob.status,
-        confidence: ob.confidence,
+        status: (ob.status as "confirmed" | "uncertain") || "confirmed",
+        confidence: typeof ob.confidence === "number" ? ob.confidence : 0.9,
         uncertaintyReason: ob.uncertaintyReason || null,
-        sourceSectionLabel: ob.sourceSectionLabel,
+        sourceSectionLabel: ob.sourceSectionLabel || "General",
         sourceSectionId: sec?.id || null,
         page: sec?.page || null,
-        exactQuote: ob.exactQuote,
+        exactQuote: ob.exactQuote || "",
         citationVerified: true,
         citationWarning: null,
         originalPayload: ob,
@@ -290,7 +291,7 @@ export async function runExtractionPipeline(
     logPipelineStep(requestId, "obligations", {
       durationMs: Date.now() - startTimeStep3,
       success: true,
-      itemCount: result.obligations.length,
+      itemCount: obligations.length,
     });
   } catch (err) {
     const msg = (err as Error).message;
@@ -316,18 +317,19 @@ export async function runExtractionPipeline(
       { requestId, stepName: "ambiguities_and_conflicts" }
     );
 
-    for (const amb of result.ambiguitiesAndConflicts) {
-      const sec = findSection(amb.sourceSectionLabel);
+    const ambiguities = (result.ambiguitiesAndConflicts || []) as any[];
+    for (const amb of ambiguities) {
+      const sec = findSection(amb.sourceSectionLabel || "General");
       const isConflict = amb.issueType === "internal_contradiction" || amb.issueType === "policy_gap";
       rawDrafts.push({
         itemType: isConflict ? "conflict" : "ambiguity",
-        status: amb.status || "uncertain",
-        confidence: amb.confidence,
-        uncertaintyReason: amb.uncertaintyReason || amb.description,
-        sourceSectionLabel: amb.sourceSectionLabel,
+        status: (amb.status as "confirmed" | "uncertain") || "uncertain",
+        confidence: typeof amb.confidence === "number" ? amb.confidence : 0.85,
+        uncertaintyReason: amb.uncertaintyReason || amb.description || null,
+        sourceSectionLabel: amb.sourceSectionLabel || "General",
         sourceSectionId: sec?.id || null,
         page: sec?.page || null,
-        exactQuote: amb.exactQuote,
+        exactQuote: amb.exactQuote || "",
         citationVerified: true,
         citationWarning: null,
         originalPayload: amb,
@@ -338,7 +340,7 @@ export async function runExtractionPipeline(
     logPipelineStep(requestId, "ambiguities_and_conflicts", {
       durationMs: Date.now() - startTimeStep4,
       success: true,
-      itemCount: result.ambiguitiesAndConflicts.length,
+      itemCount: ambiguities.length,
     });
   } catch (err) {
     const msg = (err as Error).message;
@@ -366,17 +368,18 @@ export async function runExtractionPipeline(
       { requestId, stepName: "clarification_questions" }
     );
 
-    for (const cq of result.clarificationQuestions) {
-      const sec = findSection(cq.sourceSectionLabel);
+    const questions = (result.clarificationQuestions || []) as any[];
+    for (const cq of questions) {
+      const sec = findSection(cq.sourceSectionLabel || "General");
       rawDrafts.push({
         itemType: "clarification_question",
-        status: cq.status || "uncertain",
-        confidence: cq.confidence,
+        status: (cq.status as "confirmed" | "uncertain") || "uncertain",
+        confidence: typeof cq.confidence === "number" ? cq.confidence : 0.9,
         uncertaintyReason: cq.uncertaintyReason || null,
-        sourceSectionLabel: cq.sourceSectionLabel,
+        sourceSectionLabel: cq.sourceSectionLabel || "General",
         sourceSectionId: sec?.id || null,
         page: sec?.page || null,
-        exactQuote: cq.exactQuote,
+        exactQuote: cq.exactQuote || "",
         citationVerified: true,
         citationWarning: null,
         originalPayload: cq,
@@ -386,7 +389,7 @@ export async function runExtractionPipeline(
     logPipelineStep(requestId, "clarification_questions", {
       durationMs: Date.now() - startTimeStep5,
       success: true,
-      itemCount: result.clarificationQuestions.length,
+      itemCount: questions.length,
     });
   } catch (err) {
     const msg = (err as Error).message;

@@ -13,7 +13,7 @@ export interface LLMClient {
   isMock(): boolean;
   generateStructured<T>(
     prompt: string,
-    schema: z.ZodType<T>,
+    schema: z.ZodType<T, any, any>,
     systemInstruction?: string,
     options?: LLMGenerateOptions
   ): Promise<T>;
@@ -39,7 +39,7 @@ export class MockLLMClient implements LLMClient {
 
   async generateStructured<T>(
     prompt: string,
-    schema: z.ZodType<T>,
+    schema: z.ZodType<T, any, any>,
     _systemInstruction?: string,
     options?: LLMGenerateOptions
   ): Promise<T> {
@@ -205,6 +205,64 @@ export class MockLLMClient implements LLMClient {
 }
 
 /**
+ * Normalizes output from diverse LLM providers (Gemini, Groq, Hugging Face)
+ * before schema validation, ensuring structural resilience against common LLM
+ * quirks (such as raw arrays instead of { items: [...] }, variant property names,
+ * or wrapped expiry date objects).
+ */
+export function normalizeLLMOutput(data: unknown, stepName?: string): unknown {
+  if (!data) return data;
+
+  const step = stepName || "";
+
+  // 1. If LLM returned raw array directly when object with array was expected
+  if (Array.isArray(data)) {
+    if (step === "obligations") return { obligations: data };
+    if (step === "ambiguities_and_conflicts") return { ambiguitiesAndConflicts: data };
+    if (step === "clarification_questions") return { clarificationQuestions: data };
+    if (step === "parties_and_effective_date") return { parties: data };
+    return { items: data };
+  }
+
+  if (typeof data !== "object") return data;
+
+  const obj = { ...(data as Record<string, any>) };
+
+  // 2. Unpack generic "items" or aliases
+  if (Array.isArray(obj.items)) {
+    if (step === "obligations" && !obj.obligations) obj.obligations = obj.items;
+    if (step === "ambiguities_and_conflicts" && !obj.ambiguitiesAndConflicts) obj.ambiguitiesAndConflicts = obj.items;
+    if (step === "clarification_questions" && !obj.clarificationQuestions) obj.clarificationQuestions = obj.items;
+    if (step === "parties_and_effective_date" && !obj.parties) obj.parties = obj.items;
+  }
+
+  // 3. Step-specific array property aliases
+  if (step === "obligations") {
+    if (!obj.obligations && Array.isArray(obj.tasks)) obj.obligations = obj.tasks;
+    if (!obj.obligations && Array.isArray(obj.deliverables)) obj.obligations = obj.deliverables;
+    if (!obj.obligations && Array.isArray(obj.data)) obj.obligations = obj.data;
+    if (!Array.isArray(obj.obligations)) obj.obligations = [];
+  } else if (step === "ambiguities_and_conflicts") {
+    if (!obj.ambiguitiesAndConflicts && Array.isArray(obj.ambiguities)) obj.ambiguitiesAndConflicts = obj.ambiguities;
+    if (!obj.ambiguitiesAndConflicts && Array.isArray(obj.conflicts)) obj.ambiguitiesAndConflicts = obj.conflicts;
+    if (!obj.ambiguitiesAndConflicts && Array.isArray(obj.data)) obj.ambiguitiesAndConflicts = obj.data;
+    if (!Array.isArray(obj.ambiguitiesAndConflicts)) obj.ambiguitiesAndConflicts = [];
+  } else if (step === "clarification_questions") {
+    if (!obj.clarificationQuestions && Array.isArray(obj.questions)) obj.clarificationQuestions = obj.questions;
+    if (!obj.clarificationQuestions && Array.isArray(obj.data)) obj.clarificationQuestions = obj.data;
+    if (!Array.isArray(obj.clarificationQuestions)) obj.clarificationQuestions = [];
+  } else if (step === "term_and_renewal") {
+    // If sections were returned as arrays, take the first element
+    if (Array.isArray(obj.term)) obj.term = obj.term[0];
+    if (Array.isArray(obj.renewal)) obj.renewal = obj.renewal[0];
+    if (Array.isArray(obj.termination)) obj.termination = obj.termination[0];
+    if (Array.isArray(obj.notice)) obj.notice = obj.notice[0];
+  }
+
+  return obj;
+}
+
+/**
  * Gemini LLM Client using official @google/genai SDK.
  */
 export class GeminiClient implements LLMClient {
@@ -231,7 +289,7 @@ export class GeminiClient implements LLMClient {
 
   async generateStructured<T>(
     prompt: string,
-    schema: z.ZodType<T>,
+    schema: z.ZodType<T, any, any>,
     systemInstruction?: string,
     options?: LLMGenerateOptions
   ): Promise<T> {
@@ -260,7 +318,8 @@ export class GeminiClient implements LLMClient {
           .trim();
 
         const jsonObject = JSON.parse(cleanJson);
-        const parsed = schema.parse(jsonObject);
+        const normalized = normalizeLLMOutput(jsonObject, options?.stepName);
+        const parsed = schema.parse(normalized);
 
         // Run post-filter for advisory phrasing
         const { sanitized } = sanitizePayloadRecursively(parsed);
@@ -302,7 +361,7 @@ export class GroqClient implements LLMClient {
 
   async generateStructured<T>(
     prompt: string,
-    schema: z.ZodType<T>,
+    schema: z.ZodType<T, any, any>,
     systemInstruction?: string,
     options?: LLMGenerateOptions
   ): Promise<T> {
@@ -352,7 +411,8 @@ export class GroqClient implements LLMClient {
           .trim();
 
         const jsonObject = JSON.parse(cleanJson);
-        const parsed = schema.parse(jsonObject);
+        const normalized = normalizeLLMOutput(jsonObject, options?.stepName);
+        const parsed = schema.parse(normalized);
         const { sanitized } = sanitizePayloadRecursively(parsed);
         return sanitized;
       } catch (err) {
@@ -392,7 +452,7 @@ export class HuggingFaceClient implements LLMClient {
 
   async generateStructured<T>(
     prompt: string,
-    schema: z.ZodType<T>,
+    schema: z.ZodType<T, any, any>,
     systemInstruction?: string,
     options?: LLMGenerateOptions
   ): Promise<T> {
@@ -442,7 +502,8 @@ export class HuggingFaceClient implements LLMClient {
           .trim();
 
         const jsonObject = JSON.parse(cleanJson);
-        const parsed = schema.parse(jsonObject);
+        const normalized = normalizeLLMOutput(jsonObject, options?.stepName);
+        const parsed = schema.parse(normalized);
         const { sanitized } = sanitizePayloadRecursively(parsed);
         return sanitized;
       } catch (err) {
@@ -488,7 +549,7 @@ export class FallbackChainLLMClient implements LLMClient {
 
   async generateStructured<T>(
     prompt: string,
-    schema: z.ZodType<T>,
+    schema: z.ZodType<T, any, any>,
     systemInstruction?: string,
     options?: LLMGenerateOptions
   ): Promise<T> {

@@ -10,34 +10,45 @@ import { z } from "zod";
 export const ExtractedObligationsResponseSchema = z.object({
   obligations: z.array(
     z.object({
-      description: z.string(),
-      responsibleParty: z.string(),
-      obligationType: z.enum([
-        "payment",
-        "reporting",
-        "delivery",
-        "confidentiality",
-        "compliance",
-        "other",
-      ]),
-      deadlineDate: z.string().nullable().optional(), // YYYY-MM-DD
-      relativeDeadline: z.string().nullable().optional(), // e.g. "within 30 days of effective date"
-      recurrence: z.enum([
-        "one_time",
-        "monthly",
-        "quarterly",
-        "semi_annual",
-        "annual",
-        "custom",
-      ]),
+      description: z.any().transform((v) => {
+        if (!v) return "Operational Obligation";
+        if (typeof v === "string") return v;
+        if (typeof v === "object") return v.description || v.title || v.text || JSON.stringify(v);
+        return String(v);
+      }),
+      responsibleParty: z.string().nullish().default("Contracting Party"),
+      obligationType: z
+        .string()
+        .nullish()
+        .transform((val) => {
+          const v = String(val || "").toLowerCase();
+          if (["payment", "reporting", "delivery", "confidentiality", "compliance"].includes(v)) {
+            return v as any;
+          }
+          return "other";
+        }),
+      deadlineDate: z.string().nullish(),
+      relativeDeadline: z.string().nullish(),
+      recurrence: z
+        .string()
+        .nullish()
+        .transform((val) => {
+          const v = String(val || "").toLowerCase();
+          if (v.includes("month")) return "monthly";
+          if (v.includes("quarter")) return "quarterly";
+          if (v.includes("semi") || v.includes("half")) return "semi_annual";
+          if (v.includes("year") || v.includes("annual")) return "annual";
+          if (v.includes("custom")) return "custom";
+          return "one_time";
+        }),
       recurrenceRule: z.string().nullish(),
-      sourceSectionLabel: z.string(),
-      exactQuote: z.string(),
-      confidence: z.number().min(0).max(1),
-      status: z.enum(["confirmed", "uncertain"]),
+      sourceSectionLabel: z.string().nullish().default("General"),
+      exactQuote: z.string().nullish().default(""),
+      confidence: z.number().min(0).max(1).nullish().default(0.9),
+      status: z.enum(["confirmed", "uncertain"]).nullish().default("confirmed"),
       uncertaintyReason: z.string().nullish(),
     })
-  ),
+  ).nullish().transform((v) => v || []),
 });
 
 export type ExtractedObligationsResponse = z.infer<typeof ExtractedObligationsResponseSchema>;
