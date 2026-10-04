@@ -1,0 +1,67 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  validate:
+    name: Build, Typecheck & Test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client & Push Schema
+        run: |
+          npx --workspace=backend prisma generate
+          npx --workspace=backend prisma db push --skip-generate
+        env:
+          DATABASE_URL: "postgresql://testuser:testpassword@localhost:5432/testdb?sslmode=disable"
+
+      - name: Typecheck Shared, Backend & Frontend
+        run: |
+          npm --workspace=shared run typecheck
+          npm --workspace=backend run typecheck
+          npm --workspace=frontend run typecheck
+
+      - name: Run Backend Tests (72 tests)
+        run: npm --workspace=backend run test
+        env:
+          NODE_ENV: test
+          DATABASE_URL: "postgresql://testuser:testpassword@localhost:5432/testdb?sslmode=disable"
+
+      - name: Run Frontend Tests (6 tests)
+        run: npm --workspace=frontend run test
+
+      - name: Build Packages & Frontend Bundle
+        run: |
+          npm --workspace=shared run build
+          npm --workspace=frontend run build

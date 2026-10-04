@@ -1,0 +1,55 @@
+MASTER SERVICES AGREEMENT
+
+This Master Services Agreement ("Agreement") is entered into and made effective as of January 1, 2026 ("Effective Date"), by and between:
+
+CloudScale Technologies Inc., a Delaware corporation with its principal place of business at 100 Innovation Way, Suite 400, San Francisco, CA 94105 ("Provider" or "Vendor"),
+and
+Apex Global Logistics LLC, a Delaware limited liability company with its principal place of business at 500 Harbor Boulevard, Floor 12, Jersey City, NJ 07310 ("Customer" or "Client").
+
+Provider and Customer may collectively be referred to as the "Parties" or individually as a "Party."
+
+SECTION 1. SERVICES AND SCOPE
+1.1 Provider agrees to make available to Customer its enterprise cloud supply chain optimization platform (the "Services") in accordance with the specifications set forth in Statement of Work No. 1.
+1.2 Provider grants Customer a non-exclusive, non-transferable right to access and use the Services during the Term solely for Customer's internal business operations.
+
+SECTION 2. TERM AND INITIAL PERIOD
+2.1 Initial Term. This Agreement shall commence on the Effective Date (January 1, 2026) and continue in full force and effect for an initial period of twelve (12) months, expiring on December 31, 2026 ("Initial Term"), unless terminated earlier in accordance with the provisions of this Agreement.
+
+SECTION 3. FEES AND PAYMENT SCHEDULE
+3.1 Subscription Fee. Customer shall pay Provider a monthly recurring subscription fee of twelve thousand five hundred United States Dollars ($12,500.00 USD).
+3.2 Invoicing. Provider shall invoice Customer in advance on the first business day of each calendar month. Customer shall remit payment within thirty (30) calendar days from the invoice date (Net 30).
+3.3 Taxes. All fees are exclusive of applicable federal, state, or municipal taxes, which shall be Customer's responsibility.
+
+SECTION 4. AUTOMATIC RENEWAL AND NON-RENEWAL NOTICE
+4.1 Automatic Renewal. Upon the expiration of the Initial Term or any subsequent renewal term, this Agreement shall automatically renew for successive twelve (12) month periods (each a "Renewal Term"), unless either Party provides written notice of non-renewal to the other Party at least thirty (30) calendar days prior to the expiration of the then-current term.
+4.2 Notice Delivery. Any notice of non-renewal must be delivered in writing via electronic mail to legal@cloudscale-tech.com and legal@apexlogistics.com, followed by standard postal confirmation.
+
+SECTION 5. SERVICE LEVEL AGREEMENT AND QUARTERLY REPORTING
+5.1 Availability Commitment. Provider guarantees that the cloud platform will achieve an uptime availability of at least 99.9% during each calendar month, excluding scheduled maintenance windows.
+5.2 Quarterly Performance Reports. Provider shall deliver quarterly uptime and SLA compliance performance reports to Customer within fifteen (15) calendar days following the conclusion of each calendar quarter (ending March 31, June 30, September 30, and December 31).
+
+SECTION 6. SECURITY AND COMPLIANCE AUDITS
+6.1 Security Standards. Provider shall maintain reasonable administrative, physical, and technical safeguards designed to protect the security, confidentiality, and integrity of Customer data.
+6.2 Annual Audit Reports. Provider shall undergo an annual independent Service Organization Control (SOC) 2 Type II audit. Provider shall deliver a copy of its current SOC 2 Type II report to Customer within thirty (30) calendar days of issuance or upon Customer's written request once per calendar year.
+
+SECTION 7. TERMINATION FOR CAUSE
+7.1 Material Breach. Either Party may terminate this Agreement immediately upon written notice if the other Party materially breaches any obligation under this Agreement and fails to cure such breach within thirty (30) calendar days after receipt of written notice specifying the breach.
+7.2 Insolvency. Either Party may terminate this Agreement immediately upon written notice if the other Party becomes insolvent, enters receivership, or files for bankruptcy protection.
+
+SECTION 8. GOVERNING LAW AND DISPUTE RESOLUTION
+8.1 Governing Law. This Agreement and any disputes arising out of or related hereto shall be governed by and construed in accordance with the laws of the State of New York, without regard to its conflict of law principles.
+8.2 Dispute Resolution. The Parties agree to attempt in good faith to resolve any dispute arising under this Agreement through informal executive negotiations before initiating formal legal proceedings.
+
+IN WITNESS WHEREOF, the Parties have executed this Master Services Agreement as of the Effective Date.
+
+CloudScale Technologies Inc.
+By: /s/ Marcus Vance
+Name: Marcus Vance
+Title: Chief Operating Officer
+Date: January 1, 2026
+
+Apex Global Logistics LLC
+By: /s/ Eleanor Hughes
+Name: Eleanor Hughes
+Title: VP of Global Procurement
+Date: January 1, 2026

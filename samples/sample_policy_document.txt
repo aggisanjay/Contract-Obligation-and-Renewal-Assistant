@@ -1,0 +1,23 @@
+APEX GLOBAL LOGISTICS LLC - ENTERPRISE VENDOR MANAGEMENT & INFORMATION SECURITY POLICY
+
+Document Reference: AGL-POL-PROC-2026-04
+Classification: Internal Corporate Policy & Guidelines
+Effective Date: January 1, 2026
+
+POLICY OVERVIEW & PURPOSE
+This Vendor Management and Information Security Policy sets forth mandatory compliance requirements for all vendor contracts, master service agreements, and software-as-a-service (SaaS) procurement. All business units, procurement specialists, and contract administrators must ensure incoming agreements comply with these standards.
+
+SECTION 1. CONTRACT TERM AND RENEWAL NOTICE REQUIREMENTS
+1.1 Minimum Renewal Notice Period. Every contract that contains an automatic renewal or evergreen renewal clause must specify a non-renewal notice period of not less than sixty (60) calendar days prior to the expiration of the current term.
+1.2 Policy Gap Escalation. Any vendor contract proposing a renewal notice period of thirty (30) days or fewer is strictly classified as a high commercial risk and must be escalated to the Director of Global Procurement for renegotiation before approval.
+
+SECTION 2. VENDOR SECURITY & COMPLIANCE MANDATES
+2.1 SOC 2 Type II Certification. All cloud service providers and vendors possessing, processing, or transmitting Apex corporate or customer data must maintain an active SOC 2 Type II certification covering the Security and Confidentiality Trust Services Criteria.
+2.2 Penetration Testing. Vendors must perform independent third-party penetration testing at least once every twelve (12) calendar months and provide proof of testing and remediation upon request.
+
+SECTION 3. DATA BREACH NOTIFICATION WINDOWS
+3.1 Incident Reporting Window. In the event of any confirmed or suspected data compromise, security incident, or unauthorized access, the vendor must notify Apex Global Logistics via email to soc@apexlogistics.com within forty-eight (48) hours of discovery. Agreements allowing longer reporting windows (e.g. 7 business days) are prohibited.
+
+SECTION 4. PAYMENT TERMS AND AUDIT RIGHTS
+4.1 Standard Payment Terms. The standard corporate payment term is Net 30 days from date of valid invoice receipt.
+4.2 Audit Rights. Contracts with critical technology vendors must preserve Apex's right to request compliance and billing audit records upon reasonable advance notice.

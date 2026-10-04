@@ -1,0 +1,152 @@
+import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
+import { prisma } from "../../models/prisma.js";
+import { format, parseISO, differenceInDays } from "date-fns";
+
+export interface DashboardDeadlineItem {
+  id: string;
+  contractId: string;
+  contractTitle: string;
+  itemType: string;
+  title: string;
+  deadlineDate: string; // YYYY-MM-DD
+  responsibleParty?: string | null;
+  urgency: "overdue" | "due_soon" | "upcoming";
+  daysRemaining: number;
+  reviewStatus: string;
+  sourceSectionLabel: string;
+  recurrence?: string | null;
+}
+
+export async function dashboardRoutes(app: FastifyInstance) {
+  app.get("/api/dashboard", async (req: FastifyRequest, reply: FastifyReply) => {
+    const query = req.query as {
+      timeframe?: string; // "7" | "30" | "90" | "overdue" | "all"
+      contractId?: string;
+      responsibleParty?: string;
+    };
+
+    const todayStr = format(new Date(), "yyyy-MM-dd");
+    const todayDate = parseISO(todayStr);
+
+    // Fetch all active items across contracts
+    const contracts = await prisma.contract.findMany({
+      where: query.contractId ? { id: query.contractId } : undefined,
+      include: {
+        versions: {
+          orderBy: { versionNumber: "desc" },
+          take: 1,
+          include: {
+            extractedItems: {
+              where: {
+                reviewStatus: { not: "rejected" },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const firmDeadlines: DashboardDeadlineItem[] = [];
+    const notYetReviewed: DashboardDeadlineItem[] = [];
+
+    for (const contract of contracts) {
+      const activeVer = contract.versions[0];
+      if (!activeVer) continue;
+
+      for (const item of activeVer.extractedItems) {
+        const targetDate = item.manualDateOverride || item.calculatedDate;
+        if (!targetDate) continue;
+
+        let payload: any = {};
+        try {
+          payload = JSON.parse(item.currentValue);
+        } catch {
+          payload = {};
+        }
+
+        let itemTitle = payload.description || payload.summary || `${item.itemType} deadline`;
+        if (item.itemType === "expiry") {
+          itemTitle = `Contract Expiration / Term End`;
+        } else if (item.itemType === "renewal") {
+          itemTitle = `Non-Renewal Notice Deadline`;
+        } else if (item.itemType === "effective_date") {
+          itemTitle = `Effective Date`;
+        }
+
+        const dateObj = parseISO(targetDate);
+        const daysDiff = differenceInDays(dateObj, todayDate);
+
+        let urgency: "overdue" | "due_soon" | "upcoming" = "upcoming";
+        if (daysDiff < 0) {
+          urgency = "overdue";
+        } else if (daysDiff <= 14) {
+          urgency = "due_soon";
+        }
+
+        const party = payload.responsibleParty || null;
+
+        // Filter by responsible party if requested
+        if (
+          query.responsibleParty &&
+          party &&
+          !party.toLowerCase().includes(query.responsibleParty.toLowerCase())
+        ) {
+          continue;
+        }
+
+        const deadlineItem: DashboardDeadlineItem = {
+          id: item.id,
+          contractId: contract.id,
+          contractTitle: contract.title,
+          itemType: item.itemType,
+          title: itemTitle,
+          deadlineDate: targetDate,
+          responsibleParty: party,
+          urgency,
+          daysRemaining: daysDiff,
+          reviewStatus: item.reviewStatus,
+          sourceSectionLabel: item.sourceSectionLabel,
+          recurrence: payload.recurrence || null,
+        };
+
+        // RULE: Only APPROVED items appear as firm deadlines.
+        // Pending/uncertain ones appear in a separate section labelled "Not yet reviewed".
+        if (item.reviewStatus === "approved" || item.reviewStatus === "edited_approved") {
+          firmDeadlines.push(deadlineItem);
+        } else {
+          notYetReviewed.push(deadlineItem);
+        }
+      }
+    }
+
+    // Apply timeframe filter to firm deadlines
+    let filteredFirm = firmDeadlines;
+    const tf = query.timeframe || "all";
+
+    if (tf === "overdue") {
+      filteredFirm = firmDeadlines.filter((d) => d.urgency === "overdue");
+    } else if (tf === "7") {
+      filteredFirm = firmDeadlines.filter((d) => d.daysRemaining >= 0 && d.daysRemaining <= 7);
+    } else if (tf === "30") {
+      filteredFirm = firmDeadlines.filter((d) => d.daysRemaining >= 0 && d.daysRemaining <= 30);
+    } else if (tf === "90") {
+      filteredFirm = firmDeadlines.filter((d) => d.daysRemaining >= 0 && d.daysRemaining <= 90);
+    }
+
+    // Sort by deadline date ascending
+    filteredFirm.sort((a, b) => a.deadlineDate.localeCompare(b.deadlineDate));
+    notYetReviewed.sort((a, b) => a.deadlineDate.localeCompare(b.deadlineDate));
+
+    return reply.send({
+      today: todayStr,
+      metrics: {
+        totalFirm: firmDeadlines.length,
+        overdueCount: firmDeadlines.filter((d) => d.urgency === "overdue").length,
+        dueSoonCount: firmDeadlines.filter((d) => d.urgency === "due_soon").length,
+        notYetReviewedCount: notYetReviewed.length,
+      },
+      firmDeadlines: filteredFirm,
+      notYetReviewed,
+    });
+  });
+}

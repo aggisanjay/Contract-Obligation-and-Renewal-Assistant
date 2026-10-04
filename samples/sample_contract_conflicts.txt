@@ -1,0 +1,46 @@
+DIGITAL MEDIA PLATFORM & CONTENT DISTRIBUTION AGREEMENT
+
+This Digital Media Platform & Content Distribution Agreement ("Agreement") is entered into as of March 1, 2026 ("Effective Date"), by and between:
+
+QuantumStream Media Corp., a California corporation with offices located at 850 Silicon Vista Parkway, San Jose, CA 95134 ("Licensor"),
+and
+Horizon Interactive Entertainment Ltd., a company organized under the laws of the United Kingdom, having its registered office at 14 Kingsway Court, London WC2B 6UN ("Licensee").
+
+SECTION 1. DEFINITIONS AND GRANT OF RIGHTS
+1.1 Licensor grants to Licensee a non-exclusive license to ingest, transcode, and stream licensed content across authorized digital distribution channels within the Territory.
+
+SECTION 2. TERM OF AGREEMENT
+2.1 Term. This Agreement shall be effective for an initial term of two (2) years commencing on March 1, 2026, and ending on February 28, 2028 ("Term").
+
+SECTION 3. RENEWAL CLAUSE AND GENERAL NOTICE
+3.1 Renewal. This Agreement will renew automatically for successive one (1) year periods unless either party gives written notice of its intention not to renew at least thirty (30) days prior to the expiration of the current term. Notice under this section may be given by electronic mail.
+
+SECTION 4. PAYMENT TERMS
+4.1 License Fee. Licensee shall pay Licensor a quarterly license fee of $45,000.00 USD, payable within forty-five (45) days of the end of each calendar quarter.
+
+SECTION 5. TECHNICAL SUPPORT AND SLA COMMITMENTS
+5.1 Support Availability. Licensor shall use reasonable commercial efforts to provide technical assistance during regular business hours.
+5.2 Incident Response. Licensor will endeavor to respond to reported platform outages as soon as commercially feasible, without any specific guaranteed uptime percentage or financial penalty for service interruption.
+
+SECTION 6. RECORD RETENTION AND AUDIT RIGHTS
+6.1 Record Keeping. Licensee shall maintain complete and accurate records concerning streaming views and revenue calculations.
+6.2 Audit Inspection. Licensor or its designated auditor may inspect Licensee's books and records from time to time upon reasonable notice during regular business hours to verify compliance with this Agreement.
+
+SECTION 7. CONFLICTING TERMINATION AND NOTICE OF NON-RENEWAL PROCEDURE
+7.1 Specific Termination Procedure. Notwithstanding anything to the contrary in Section 3 or anywhere else in this Agreement, any election by Licensee or Licensor to terminate, cancel, or opt out of automatic renewal must be delivered exclusively by certified registered mail with return receipt requested to Licensor's Office of the General Counsel at least sixty (60) calendar days prior to the conclusion of the Initial Term.
+7.2 Defective Notice. Any notice sent by email or with less than sixty (60) days advance notice shall be considered null, void, and of no legal effect, resulting in mandatory renewal under Section 3.
+
+SECTION 8. GOVERNING LAW AND JURISDICTION
+8.1 Jurisdiction. This Agreement shall be governed by the laws of the State of California without reference to conflict of laws principles. The state and federal courts located in Santa Clara County, California, shall have exclusive jurisdiction.
+
+IN WITNESS WHEREOF, the authorized representatives of the Parties have executed this Agreement as of the Effective Date.
+
+QuantumStream Media Corp.
+By: /s/ David Sterling
+Name: David Sterling
+Title: VP Business Development
+
+Horizon Interactive Entertainment Ltd.
+By: /s/ Victoria Ashworth
+Name: Victoria Ashworth
+Title: Managing Director

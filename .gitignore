@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Production & Build Artifacts
+dist/
+build/
+*.tsbuildinfo
+
+# Environment & Secrets (Crucial - never commit real API keys or database URLs)
+.env
+.env.local
+.env.*.local
+*.env
+!.env.example
+
+# Local SQLite databases (if used in local mode)
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Logs & Temporary files
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Test & Coverage
+coverage/
+.nyc_output/
+
+# IDE & OS files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Antigravity & Agent scratch artifacts
+.system_generated/

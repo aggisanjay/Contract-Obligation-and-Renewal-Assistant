@@ -1,0 +1,40 @@
+{
+  "name": "@contract-assistant/backend",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev --name init",
+    "prisma:push": "prisma db push"
+  },
+  "dependencies": {
+    "@contract-assistant/shared": "*",
+    "@fastify/cors": "^10.0.2",
+    "@fastify/multipart": "^9.0.3",
+    "@google/genai": "^0.2.0",
+    "@prisma/client": "^6.4.0",
+    "date-fns": "^4.1.0",
+    "dotenv": "^16.4.7",
+    "fastify": "^5.2.1",
+    "mammoth": "^1.9.0",
+    "pdfjs-dist": "^4.10.38",
+    "pino": "^9.6.0",
+    "pino-pretty": "^13.0.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "@types/supertest": "^6.0.2",
+    "prisma": "^6.4.0",
+    "supertest": "^7.0.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.6"
+  }
+}

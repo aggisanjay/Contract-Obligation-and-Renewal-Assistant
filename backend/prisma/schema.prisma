@@ -1,0 +1,123 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Contract {
+  id          String            @id @default(uuid())
+  title       String
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  versions    ContractVersion[]
+  summaries   ReviewedSummary[]
+}
+
+model ContractVersion {
+  id             String            @id @default(uuid())
+  contractId     String
+  contract       Contract          @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  versionNumber  Int               @default(1)
+  rawText        String
+  policyText     String?
+  pageCount      Int?
+  fileType       String            @default("text") // "pdf" | "docx" | "text"
+  createdAt      DateTime          @default(now())
+
+  sections       DocumentSection[]
+  extractedItems ExtractedItem[]
+  auditLogs      AuditLog[]
+  summaries      ReviewedSummary[]
+}
+
+model DocumentSection {
+  id                String          @id @default(uuid())
+  contractVersionId String
+  contractVersion   ContractVersion @relation(fields: [contractVersionId], references: [id], onDelete: Cascade)
+  sectionIndex      Int
+  label             String
+  heading           String?
+  text              String
+  page              Int?
+  charStart         Int
+  charEnd           Int
+  documentType      String          @default("contract") // "contract" | "policy"
+
+  @@index([contractVersionId])
+}
+
+model ExtractedItem {
+  id                   String          @id @default(uuid())
+  contractVersionId    String
+  contractVersion      ContractVersion @relation(fields: [contractVersionId], references: [id], onDelete: Cascade)
+  itemType             String          // party | effective_date | expiry | renewal | termination | notice | obligation | ambiguity | conflict | clarification_question
+  status               String          @default("confirmed") // confirmed | uncertain
+  confidence           Float           @default(1.0)
+  uncertaintyReason    String?
+  
+  // Citations
+  sourceSectionLabel   String
+  sourceSectionId      String?
+  page                 Int?
+  exactQuote           String
+  citationVerified     Boolean         @default(true)
+  citationWarning      String?
+
+  // Review states
+  reviewStatus         String          @default("pending") // pending | approved | rejected | edited_approved | stale
+  userEdited           Boolean         @default(false)
+  originalValue        String          // JSON string
+  currentValue         String          // JSON string
+  staleReason          String?
+
+  // Date resolution
+  calculatedDate       String?         // YYYY-MM-DD
+  manualDateOverride   String?         // YYYY-MM-DD
+  dateResolutionStatus String          @default("not_applicable") // resolved | needs_input | not_applicable
+  dateResolutionReason String?
+
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  @@index([contractVersionId])
+  @@index([itemType])
+  @@index([reviewStatus])
+}
+
+model AuditLog {
+  id                String          @id @default(uuid())
+  contractVersionId String
+  contractVersion   ContractVersion @relation(fields: [contractVersionId], references: [id], onDelete: Cascade)
+  itemId            String?
+  actor             String          @default("local user")
+  action            String          // item_approved, item_rejected, etc.
+  oldValue          String?
+  newValue          String?
+  note              String?
+  createdAt         DateTime        @default(now())
+
+  @@index([contractVersionId])
+}
+
+model ReviewedSummary {
+  id                String          @id @default(uuid())
+  contractId        String
+  contract          Contract        @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  contractVersionId String
+  contractVersion   ContractVersion @relation(fields: [contractVersionId], references: [id], onDelete: Cascade)
+  versionNumber     Int
+  contractTitle     String
+  generatedAt       DateTime        @default(now())
+  isOutdated        Boolean         @default(false)
+  markdownContent   String
+  htmlContent       String
+  dataJson          String          // Serialized summary payload
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([contractId])
+  @@index([contractVersionId])
+}
