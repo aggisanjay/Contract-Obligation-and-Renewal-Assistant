@@ -39,6 +39,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build Shared Package
+        run: npm --workspace=shared run build
+
       - name: Generate Prisma Client & Push Schema
         run: |
           npx --workspace=backend prisma generate

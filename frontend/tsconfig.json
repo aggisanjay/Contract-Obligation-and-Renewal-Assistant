@@ -16,7 +16,11 @@
     "strictNullChecks": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "baseUrl": ".",
+    "paths": {
+      "@contract-assistant/shared": ["../shared/src/index.ts"]
+    }
   },
   "include": ["src"]
 }

@@ -13,7 +13,7 @@
     "build": "npm --workspace=shared run build && npm --workspace=backend run build && npm --workspace=frontend run build",
     "test": "npm --workspace=shared run test --if-present && npm --workspace=backend run test && npm --workspace=frontend run test --if-present",
     "lint": "npm --workspace=backend run lint --if-present && npm --workspace=frontend run lint --if-present",
-    "typecheck": "npm --workspace=shared run typecheck && npm --workspace=backend run typecheck && npm --workspace=frontend run typecheck"
+    "typecheck": "npm --workspace=shared run build && npm --workspace=shared run typecheck && npm --workspace=backend run typecheck && npm --workspace=frontend run typecheck"
   },
   "devDependencies": {
     "prettier": "^3.5.0"
