@@ -17,6 +17,10 @@
     "lint": "eslint .",
     "typecheck": "node scripts/typecheck.mjs"
   },
+  "dependencies": {
+    "prisma": "^6.4.0",
+    "typescript": "^5.7.3"
+  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "eslint": "^10.12.0",
