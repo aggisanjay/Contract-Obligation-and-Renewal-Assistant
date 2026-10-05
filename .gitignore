@@ -8,8 +8,6 @@ build/
 *.tsbuildinfo
 
 # Environment & Secrets (Crucial - never commit real API keys or database URLs)
-.env
-.env.local
 .env.*.local
 *.env
 !.env.example
@@ -36,7 +34,6 @@ coverage/
 .DS_Store
 Thumbs.db
 .idea/
-.vscode/
 *.suo
 *.ntvs*
 *.njsproj
@@ -45,3 +42,7 @@ Thumbs.db
 
 # Antigravity & Agent scratch artifacts
 .system_generated/
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat
+config.bat

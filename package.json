@@ -9,10 +9,10 @@
     "frontend"
   ],
   "scripts": {
-    "dev:backend": "npm --workspace=backend run dev",
-    "dev:frontend": "npm --workspace=frontend run dev",
-    "build": "node scripts/build.mjs",
-    "start": "npx --workspace=backend prisma migrate deploy && node backend/dist/index.js",
+    "dev:backend": "node init && npm --workspace=backend run dev",
+    "dev:frontend": "node init && npm --workspace=frontend run dev",
+    "build": "node init && node scripts/build.mjs",
+    "start": "node init && npx --workspace=backend prisma migrate deploy && node backend/dist/index.js",
     "test": "node ./node_modules/vitest/vitest.mjs run --root backend && node ./node_modules/vitest/vitest.mjs run --root frontend",
     "lint": "eslint .",
     "typecheck": "node scripts/typecheck.mjs"
