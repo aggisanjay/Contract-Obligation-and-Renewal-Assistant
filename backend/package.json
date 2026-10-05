@@ -4,8 +4,8 @@
   "private": true,
   "main": "dist/index.js",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "dev": "node api.js && tsx watch src/index.ts",
+    "build": "node api.js && tsc",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",
     "test": "vitest run",
