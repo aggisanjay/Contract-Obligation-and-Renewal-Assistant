@@ -46,10 +46,8 @@ flowchart TD
         D --> E4[Pass 4: Ambiguities, Conflicts & Policy Gaps]
         D --> E5[Pass 5: Neutral Clarification Questions]
         
-        E1 & E2 & E3 & E4 & E5 --> F[Multi-Provider LLM Fallback Chain]
-        F -->|Primary| F1[Google Gemini]
-        F -->|Failover on 429 Rate Limit| F2[Groq Llama 3.3]
-        F -->|Failover on 503 / Limit| F3[Hugging Face Qwen 2.5]
+        E1 & E2 & E3 & E4 & E5 --> F[Hugging Face Qwen 2.5 Inference]
+        F -->|Direct Fast Inference| F1[Hugging Face Serverless / Router API]
         F -->|No Keys Configured| F4[MockLLM Demo Mode]
 
         F --> G[Deterministic Guardrail Post-Filter]
@@ -103,15 +101,12 @@ To guarantee safety, auditability, and zero hallucinated dates, probabilistic AI
 
 ---
 
-## ⚡ Multi-Provider LLM Fallback (Zero Rate-Limit Downtime)
+## ⚡ Fast LLM Inference (Hugging Face)
 
-The system includes a resilient **multi-provider LLM chain**:
-1. **Google Gemini** (`gemini-2.5-flash` / `gemini-1.5-pro` via `@google/genai`)
-2. **Groq** (`llama-3.3-70b-versatile` via high-speed REST)
-3. **Hugging Face** (`Qwen/Qwen2.5-72B-Instruct` via Router API)
-4. **Mock LLM Fallback** (active in test runs or demo mode when no keys are set)
-
-> **Automatic 429 Failover:** If your primary provider hits an HTTP 429 Rate Limit, token quota exhaustion, or 503 service overload, the engine logs a structured warning and **automatically retries the extraction pass with the next provider in the chain**.
+The system connects directly to **Hugging Face Serverless Inference / Router API** for fast, deterministic contract extractions:
+1. **Model:** `Qwen/Qwen2.5-72B-Instruct` (72B parameter instruction-tuned model with exceptional structured JSON compliance and legal syntax accuracy)
+2. **Direct Execution:** Direct execution without multi-provider rollover latency or cascading retry delays.
+3. **Mock LLM Fallback:** Automatically active in automated test runs or demo mode when no API keys are provided.
 
 ---
 
@@ -178,17 +173,9 @@ NODE_ENV=development
 # Database Connection (Neon, Supabase, or PostgreSQL)
 DATABASE_URL="postgresql://username:password@host/database?sslmode=require"
 
-# Multi-Provider LLM Fallback (Add one or more keys)
-# 1. Google Gemini
-GEMINI_API_KEY="your-gemini-api-key"
-GEMINI_MODEL="gemini-2.5-flash"
-
-# 2. Groq (Optional fallback - get free key at https://console.groq.com)
-GROQ_API_KEY=""
-GROQ_MODEL="llama-3.3-70b-versatile"
-
-# 3. Hugging Face (Optional fallback - get free token at https://huggingface.co/settings/tokens)
-HUGGINGFACE_API_KEY=""
+# LLM Inference (Hugging Face Serverless / Router API)
+# Get a free access token at: https://huggingface.co/settings/tokens
+HUGGINGFACE_API_KEY="your-huggingface-token"
 HUGGINGFACE_MODEL="Qwen/Qwen2.5-72B-Instruct"
 ```
 
@@ -239,11 +226,11 @@ curl http://localhost:3001/api/health
 Response:
 ```json
 {
-  "status": "healthy",
-  "timestamp": "2026-10-04T13:20:00.000Z",
-  "database": "connected",
-  "llmMode": "Gemini (gemini-2.5-flash)",
-  "uptimeSeconds": 142
+  "status": "ok",
+  "llmMode": "huggingface",
+  "db": "ok",
+  "timestamp": "2026-10-05T08:00:00.000Z",
+  "service": "Contract Obligation & Renewal Assistant"
 }
 ```
 

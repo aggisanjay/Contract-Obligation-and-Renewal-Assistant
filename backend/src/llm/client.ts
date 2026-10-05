@@ -658,8 +658,8 @@ let activeClient: LLMClient | null = null;
 
 /**
  * Factory for obtaining the configured LLMClient.
- * Assembles a FallbackChainLLMClient from all available providers:
- * Gemini -> Groq -> Hugging Face -> MockLLMClient (if none configured)
+ * Configured exclusively for Hugging Face (Qwen 2.5 72B) for direct, fast inference
+ * without Gemini/Groq rate-limit retries or fallback rollover latency.
  */
 export function getLLMClient(): LLMClient {
   // Use MockLLMClient in automated unit tests for speed and determinism
@@ -669,46 +669,20 @@ export function getLLMClient(): LLMClient {
 
   if (activeClient) return activeClient;
 
-  const providers: NamedLLMClient[] = [];
-
-  const geminiKey = process.env.GEMINI_API_KEY?.trim();
-  const geminiModel = process.env.GEMINI_MODEL || "gemini-3.8-flash";
-  if (geminiKey) {
-    providers.push({
-      name: "Gemini",
-      client: new GeminiClient(geminiKey, geminiModel),
-    });
-  }
-
-  const groqKey = process.env.GROQ_API_KEY?.trim();
-  const groqModel = process.env.GROQ_MODEL || "openai/gpt-oss-20b";
-  if (groqKey) {
-    providers.push({
-      name: "Groq",
-      client: new GroqClient(groqKey, groqModel),
-    });
-  }
-
   const hfKey = process.env.HUGGINGFACE_API_KEY?.trim();
   const hfModel = process.env.HUGGINGFACE_MODEL || "Qwen/Qwen2.5-72B-Instruct";
+
   if (hfKey) {
-    providers.push({
-      name: "HuggingFace",
-      client: new HuggingFaceClient(hfKey, hfModel),
-    });
-  }
-
-  if (providers.length > 0) {
     logger.info(
-      { providers: providers.map((p) => p.name) },
-      "Configured multi-provider LLM fallback chain with automatic rate-limit rollover"
+      { provider: "HuggingFace", model: hfModel },
+      "Configured Hugging Face LLM client (direct execution, zero retry delay)"
     );
-    activeClient = new FallbackChainLLMClient(providers);
-  } else {
-    logger.info("No LLM API keys configured; using MockLLMClient demo mode");
-    activeClient = new MockLLMClient();
+    activeClient = new HuggingFaceClient(hfKey, hfModel);
+    return activeClient;
   }
 
+  logger.info("No HuggingFace API key configured; using MockLLMClient demo mode");
+  activeClient = new MockLLMClient();
   return activeClient;
 }
 
@@ -722,14 +696,13 @@ export function getLLMMode(): "gemini" | "groq" | "huggingface" | "mock" {
   }
   const client = getLLMClient();
   if (client.isMock()) return "mock";
+  if (client instanceof HuggingFaceClient) return "huggingface";
   if (client instanceof FallbackChainLLMClient) {
     const first = client.getProviders()[0]?.name.toLowerCase();
+    if (first === "huggingface") return "huggingface";
     if (first === "gemini") return "gemini";
     if (first === "groq") return "groq";
-    if (first === "huggingface") return "huggingface";
   }
-  if (process.env.GEMINI_API_KEY) return "gemini";
-  if (process.env.GROQ_API_KEY) return "groq";
   if (process.env.HUGGINGFACE_API_KEY) return "huggingface";
   return "mock";
 }
