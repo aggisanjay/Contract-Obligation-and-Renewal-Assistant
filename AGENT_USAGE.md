@@ -184,6 +184,16 @@ During system development and automated verification, several agent mistakes and
 - **Resolution:** Replaced all `alert()` calls with an accessible, auto-dismissing `ToastContext` provider and animated toast notification system.
 - <!-- TODO: Implement undo action within toast notifications for accidental rejections -->
 
+### Mistake 6: Failing to Parse Natural Written Dates Causing Cascading Unresolved Deadlines
+- **What happened:** In real-world contracts, effective dates are frequently drafted in natural language (e.g. "January 15, 2026") rather than ISO format `YYYY-MM-DD`. `resolveItemCalculatedDate()` only accepted ISO dates, leaving effective dates unresolved (`status: "needs_input"`). Because expiry dates and notice deadlines depend strictly on the effective date anchor, all dependent dates cascaded into "Not confirmed" in summaries.
+- **Why rejected:** Contract terms ("12 months from Effective Date") and notice periods ("90 days prior") must compute deterministically even when dates are drafted in common natural formats.
+- **Resolution:** Created and exported `parseNaturalDate()` in `dates.ts` supporting standard month-name formats, ordinals ("15th"), and day-month-year syntax. Built `recomputeVersionDates()` in `dateRecalculator.ts` to execute dependency-ordered recalculations across effective dates, expiry terms, and renewal notice deadlines, preserving manual human overrides as immutable anchors.
+
+### Mistake 7: Sub-Clause Citation Mismatch Generating False Warnings
+- **What happened:** When the LLM cited `Section 2.1` for a renewal notice obligation, but the document section parser grouped the clause under `Section 2`, `citationVerifier.ts` reported a false citation warning (`"Quote was found in 'Section 2', not in cited 'Section 2.1'."`), lowering item confidence and blocking bulk approval.
+- **Why rejected:** Legitimate sub-clause references within parent sections should not trigger false-positive warnings or penalize reviewer efficiency.
+- **Resolution:** Updated `citationVerifier.ts` to allow parent/child prefix alignment (`Section 2` vs `Section 2.1`) so valid verbatim quotes within parent or child section boundaries verify cleanly (`citationVerified: true`, `warning: null`).
+
 ---
 
 ## 5. Output Verification & Auditing Procedures
@@ -202,9 +212,9 @@ All outputs produced by the system undergo a multi-stage deterministic verificat
    - All extraction passes are validated against Zod schemas defined in `@contract-assistant/shared`. Any malformed model output fails immediately and triggers provider rollover.
 
 4. **Automated Test Suite Enforcement:**
-   - **102 Backend Tests:** Verifying date math, multi-provider fallback, citation verification, audit trails, and versioning.
-   - **15 Frontend Tests:** Verifying review queue workflows, stale item reconfirmation, toast notifications, and diff viewers.
-   - **Total 117 Tests Passing** with 0 failures across all workspaces.
+   - **126 Backend Tests:** Verifying date math, natural written date parsing, cascading recalculations, multi-provider fallback, citation verification, audit trails, and versioning.
+   - **19 Frontend Tests:** Verifying review queue workflows, recalculate dates button, stale item reconfirmation, toast notifications, and diff viewers.
+   - **Total 145 Tests Passing** with 0 failures across all workspaces.
 
 5. **Human-in-the-Loop Approved-Only Output Boundary:**
    - Unapproved candidate items are never included in executive summaries or firm deadline alerts.

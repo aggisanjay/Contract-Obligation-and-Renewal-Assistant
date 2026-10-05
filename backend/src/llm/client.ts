@@ -57,6 +57,9 @@ export class MockLLMClient implements LLMClient {
     let mockData: unknown = {};
 
     const step = options?.stepName || "";
+    const hasJan15 = lowerPrompt.includes("january 15, 2026");
+    const hasNinetyDays = lowerPrompt.includes("ninety (90) days") || lowerPrompt.includes("90 days");
+
     if (step === "parties_and_effective_date" || (!step && lowerPrompt.includes("extract contracting parties"))) {
       mockData = {
         parties: [
@@ -80,10 +83,12 @@ export class MockLLMClient implements LLMClient {
           },
         ],
         effectiveDate: {
-          date: "2025-01-01",
+          date: hasJan15 ? "January 15, 2026" : "2025-01-01",
           isRelative: false,
           sourceSectionLabel: "Section 1",
-          exactQuote: "The Effective Date of this Agreement shall be January 1, 2025.",
+          exactQuote: hasJan15
+            ? "The Effective Date is January 15, 2026."
+            : "The Effective Date of this Agreement shall be January 1, 2025.",
           confidence: 0.99,
           status: "confirmed",
         },
@@ -93,7 +98,7 @@ export class MockLLMClient implements LLMClient {
         term: {
           termLengthMonths: 12,
           termLengthYears: 1,
-          expiryDate: "2026-01-01",
+          expiryDate: hasNinetyDays ? null : "2026-01-01",
           isPerpetual: false,
           description: "Initial term of twelve (12) months from the Effective Date.",
           sourceSectionLabel: "Section 2",
@@ -104,10 +109,15 @@ export class MockLLMClient implements LLMClient {
         renewal: {
           isAutoRenew: true,
           renewalTermMonths: 12,
-          noticePeriodDays: 30,
-          conditions: "Renews automatically for 1-year terms unless either party gives 30 days notice.",
+          advanceNoticeDays: hasNinetyDays ? 90 : 30,
+          noticePeriodDays: hasNinetyDays ? 90 : 30,
+          conditions: hasNinetyDays
+            ? "Renews automatically for 1-year terms unless either party gives 90 days notice."
+            : "Renews automatically for 1-year terms unless either party gives 30 days notice.",
           sourceSectionLabel: "Section 2.1",
-          exactQuote: "This Agreement shall automatically renew for additional one-year terms unless either party provides written notice of non-renewal at least thirty (30) days prior.",
+          exactQuote: hasNinetyDays
+            ? "unless either party provides written notice of non-renewal at least ninety (90) days prior to the expiration date."
+            : "This Agreement shall automatically renew for additional one-year terms unless either party provides written notice of non-renewal at least thirty (30) days prior.",
           confidence: 0.96,
           status: "confirmed",
         },
@@ -122,7 +132,7 @@ export class MockLLMClient implements LLMClient {
           status: "confirmed",
         },
         notice: {
-          noticePeriodDays: 30,
+          noticePeriodDays: hasNinetyDays ? 90 : 30,
           method: "Certified email or courier",
           recipient: "Notices Officer",
           sourceSectionLabel: "Section 12",

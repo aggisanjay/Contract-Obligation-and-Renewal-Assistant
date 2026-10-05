@@ -104,6 +104,7 @@ export function compileReviewedSummary(
   });
 
   // 2. Key Dates
+  const allEffItems = items.filter((i) => i.itemType === "effective_date");
   const effItem = approvedItems.find((i) => i.itemType === "effective_date");
   const effVal = effItem ? parseVal(effItem) : null;
   const effectiveDate =
@@ -112,6 +113,18 @@ export function compileReviewedSummary(
     (effVal && str(effVal.date)) ||
     null;
 
+  let effectiveDateDisplay: string;
+  if (effectiveDate) {
+    effectiveDateDisplay = effectiveDate;
+  } else if (effItem) {
+    effectiveDateDisplay = `Needs input: ${effItem.dateResolutionReason || "Effective date could not be parsed."}`;
+  } else if (allEffItems.length > 0) {
+    effectiveDateDisplay = "Pending review";
+  } else {
+    effectiveDateDisplay = "Not found in contract";
+  }
+
+  const allExpItems = items.filter((i) => i.itemType === "expiry");
   const expItem = approvedItems.find((i) => i.itemType === "expiry");
   const expVal = expItem ? parseVal(expItem) : null;
   const expiryDate =
@@ -120,11 +133,53 @@ export function compileReviewedSummary(
     (expVal && str(expVal.expiryDate)) ||
     null;
 
-  const renewalNoticeItem = approvedItems.find(
+  let expiryDateDisplay: string;
+  if (expiryDate) {
+    expiryDateDisplay = expiryDate;
+  } else if (expItem) {
+    expiryDateDisplay = `Needs input: ${expItem.dateResolutionReason || "Expiry date could not be resolved from term or effective date."}`;
+  } else if (allExpItems.length > 0) {
+    expiryDateDisplay = "Pending review";
+  } else {
+    expiryDateDisplay = "Not found in contract";
+  }
+
+  // Renewal status for notice deadline
+  const approvedRenewal = approvedItems.find((i) => i.itemType === "renewal");
+  const anyRenewal = items.find((i) => i.itemType === "renewal");
+  const renewalItemForNotice = approvedRenewal || anyRenewal;
+  let isExplicitlyNotAutoRenew = false;
+  if (renewalItemForNotice) {
+    const rVal = parseVal(renewalItemForNotice);
+    if (rVal.isAutoRenew === false || rVal.renewalType === "none") {
+      isExplicitlyNotAutoRenew = true;
+    }
+  }
+
+  const allNoticeItems = items.filter(
     (i) => i.itemType === "renewal" || i.itemType === "notice"
   );
+  const renewalNoticeItem =
+    (approvedRenewal?.manualDateOverride || approvedRenewal?.calculatedDate
+      ? approvedRenewal
+      : null) ||
+    approvedItems.find((i) => i.itemType === "notice") ||
+    approvedRenewal;
   const noticeDeadline =
     renewalNoticeItem?.manualDateOverride || renewalNoticeItem?.calculatedDate || null;
+
+  let noticeDeadlineDisplay: string;
+  if (isExplicitlyNotAutoRenew) {
+    noticeDeadlineDisplay = "Not applicable (does not renew automatically)";
+  } else if (noticeDeadline) {
+    noticeDeadlineDisplay = noticeDeadline;
+  } else if (renewalNoticeItem) {
+    noticeDeadlineDisplay = `Needs input: ${renewalNoticeItem.dateResolutionReason || "Notice deadline could not be calculated."}`;
+  } else if (allNoticeItems.length > 0) {
+    noticeDeadlineDisplay = "Pending review";
+  } else {
+    noticeDeadlineDisplay = "Not found in contract";
+  }
 
   const keyDateCitations = [
     effItem ? `Effective Date: [${effItem.sourceSectionLabel}] "${effItem.exactQuote}"` : "",
@@ -135,20 +190,6 @@ export function compileReviewedSummary(
   ]
     .filter(Boolean)
     .join(" | ");
-
-  const pendingEffective = items.some(
-    (i) => i.itemType === "effective_date" && i.reviewStatus === "pending"
-  );
-  const pendingExpiry = items.some(
-    (i) => i.itemType === "expiry" && i.reviewStatus === "pending"
-  );
-  const pendingNotice = items.some(
-    (i) => (i.itemType === "renewal" || i.itemType === "notice") && i.reviewStatus === "pending"
-  );
-
-  const effectiveDateDisplay = effectiveDate || (pendingEffective ? "Pending review" : "Not confirmed");
-  const expiryDateDisplay = expiryDate || (pendingExpiry ? "Pending review" : "Not confirmed");
-  const noticeDeadlineDisplay = noticeDeadline || (pendingNotice ? "Pending review" : "Not confirmed");
 
   // 3. Renewal Terms
   const renewalItem = approvedItems.find((i) => i.itemType === "renewal");
@@ -213,7 +254,10 @@ export function compileReviewedSummary(
 
   // 6. Open Questions and Clarifications
   const questionItems = items.filter(
-    (i) => i.itemType === "clarification_question" || i.itemType === "ambiguity"
+    (i) =>
+      i.itemType === "clarification_question" ||
+      i.itemType === "ambiguity" ||
+      i.itemType === "conflict"
   );
   const openQuestionsAndAmbiguities: SummaryAmbiguity[] = questionItems.map((item) => {
     const val = parseVal(item);
@@ -429,9 +473,9 @@ ${
     disclaimer: LEGAL_DISCLAIMER,
     parties,
     keyDates: {
-      effectiveDate,
-      expiryDate,
-      noticeDeadline,
+      effectiveDate: effectiveDateDisplay,
+      expiryDate: expiryDateDisplay,
+      noticeDeadline: noticeDeadlineDisplay,
       citation: keyDateCitations,
     },
     renewalTerms,

@@ -105,7 +105,7 @@ describe("summaryCompiler - compileReviewedSummary unit tests", () => {
     expect(summaryApprovedTerm.terminationTerms.summary).toBe("30 days notice for convenience.");
   });
 
-  it("shows 'Pending review' (not 'Not confirmed') if expiry/notice items exist but are pending", () => {
+  it("shows 'Pending review' if expiry/notice items exist but are pending, and 'Not found in contract' if item does not exist", () => {
     const pendingExpiry = makeItem({
       itemType: "expiry",
       reviewStatus: "pending",
@@ -119,18 +119,23 @@ describe("summaryCompiler - compileReviewedSummary unit tests", () => {
 
     const summary = compileReviewedSummary("Test Contract", 1, [pendingExpiry, pendingRenewal]);
 
-    // Effective date was never found -> "Not confirmed"
-    expect(summary.markdown).toContain("- **Effective Date:** Not confirmed");
+    // Effective date was never found -> "Not found in contract"
+    expect(summary.keyDates.effectiveDate).toBe("Not found in contract");
+    expect(summary.markdown).toContain("- **Effective Date:** Not found in contract");
+
     // Expiry date is pending -> "Pending review"
+    expect(summary.keyDates.expiryDate).toBe("Pending review");
     expect(summary.markdown).toContain("- **Contract Expiry Date:** Pending review");
+
     // Notice deadline is pending -> "Pending review"
+    expect(summary.keyDates.noticeDeadline).toBe("Pending review");
     expect(summary.markdown).toContain("- **Notice Deadline:** Pending review");
 
     expect(summary.html).toContain("<strong>Contract Expiry Date:</strong> Pending review");
     expect(summary.html).toContain("<strong>Notice Deadline:</strong> Pending review");
   });
 
-  it("shows concrete dates when approved and 'Not confirmed' when items do not exist", () => {
+  it("shows concrete dates when approved and 'Not found in contract' when items do not exist", () => {
     const approvedEff = makeItem({
       itemType: "effective_date",
       reviewStatus: "approved",
@@ -138,8 +143,60 @@ describe("summaryCompiler - compileReviewedSummary unit tests", () => {
     });
 
     const summary = compileReviewedSummary("Test Contract", 1, [approvedEff]);
+    expect(summary.keyDates.effectiveDate).toBe("2025-01-01");
     expect(summary.markdown).toContain("- **Effective Date:** 2025-01-01");
-    expect(summary.markdown).toContain("- **Contract Expiry Date:** Not confirmed");
-    expect(summary.markdown).toContain("- **Notice Deadline:** Not confirmed");
+    expect(summary.keyDates.expiryDate).toBe("Not found in contract");
+    expect(summary.markdown).toContain("- **Contract Expiry Date:** Not found in contract");
+    expect(summary.keyDates.noticeDeadline).toBe("Not found in contract");
+    expect(summary.markdown).toContain("- **Notice Deadline:** Not found in contract");
+  });
+
+  it("shows 'Needs input: <reason>' when item is approved but date could not be calculated", () => {
+    const approvedRelativeEff = makeItem({
+      itemType: "effective_date",
+      reviewStatus: "approved",
+      calculatedDate: null,
+      dateResolutionStatus: "needs_input",
+      dateResolutionReason: "Effective date is relative (for example, the date of last signature). Confirm the date manually.",
+    });
+
+    const approvedExpNoDate = makeItem({
+      itemType: "expiry",
+      reviewStatus: "approved",
+      calculatedDate: null,
+      dateResolutionStatus: "needs_input",
+      dateResolutionReason: "Expiry date could not be resolved from term or effective date.",
+    });
+
+    const summary = compileReviewedSummary("Test Contract", 1, [approvedRelativeEff, approvedExpNoDate]);
+    expect(summary.keyDates.effectiveDate).toBe(
+      "Needs input: Effective date is relative (for example, the date of last signature). Confirm the date manually."
+    );
+    expect(summary.markdown).toContain(
+      "- **Effective Date:** Needs input: Effective date is relative (for example, the date of last signature). Confirm the date manually."
+    );
+    expect(summary.keyDates.expiryDate).toBe(
+      "Needs input: Expiry date could not be resolved from term or effective date."
+    );
+    expect(summary.markdown).toContain(
+      "- **Contract Expiry Date:** Needs input: Expiry date could not be resolved from term or effective date."
+    );
+  });
+
+  it("shows 'Not applicable (does not renew automatically)' for notice deadline when isAutoRenew is false", () => {
+    const noAutoRenewItem = makeItem({
+      itemType: "renewal",
+      reviewStatus: "approved",
+      currentValue: JSON.stringify({ isAutoRenew: false }),
+    });
+
+    const summary = compileReviewedSummary("Test Contract", 1, [noAutoRenewItem]);
+    expect(summary.keyDates.noticeDeadline).toBe("Not applicable (does not renew automatically)");
+    expect(summary.markdown).toContain(
+      "- **Notice Deadline:** Not applicable (does not renew automatically)"
+    );
+    expect(summary.html).toContain(
+      "<li><strong>Notice Deadline:</strong> Not applicable (does not renew automatically)</li>"
+    );
   });
 });

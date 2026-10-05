@@ -8,6 +8,7 @@ import {
   deleteContract,
   resolveStaleItem,
   retryExtractionStep,
+  recalculateContractDates,
   ContractDetailsResponse,
 } from "../services/api.js";
 import { UploadVersionModal } from "../components/UploadVersionModal.js";
@@ -90,6 +91,7 @@ export const ReviewPage: React.FC = () => {
   // Date override state
   const [overridingDateId, setOverridingDateId] = useState<string | null>(null);
   const [newDateVal, setNewDateVal] = useState<string>("");
+  const [isRecalculatingDates, setIsRecalculatingDates] = useState(false);
 
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
 
@@ -343,6 +345,23 @@ export const ReviewPage: React.FC = () => {
     }
   };
 
+  const handleRecalculateDates = async () => {
+    if (!id || !data) return;
+    setIsRecalculatingDates(true);
+    try {
+      const res = await recalculateContractDates(id, data.activeVersion.id);
+      const stillCount = res.stillNeedsInput.length;
+      toast.success(
+        `${res.updatedCount} date${res.updatedCount === 1 ? "" : "s"} updated${stillCount > 0 ? `, ${stillCount} still needs input` : ""}`
+      );
+      await loadData(selectedVersion || undefined, true);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to recalculate dates");
+    } finally {
+      setIsRecalculatingDates(false);
+    }
+  };
+
   const viewAuditLog = async () => {
     if (!id) return;
     const res = await getAuditLog(id);
@@ -491,6 +510,18 @@ export const ReviewPage: React.FC = () => {
           >
             <History className="w-3.5 h-3.5 mr-1.5 text-slate-500" />
             Audit Log ({activeVersion.auditLogs.length})
+          </button>
+
+          <button
+            onClick={handleRecalculateDates}
+            disabled={isRecalculatingDates}
+            className="inline-flex items-center px-3.5 py-2 border border-slate-200 bg-white hover:bg-slate-50 rounded-xl text-xs font-bold text-slate-700 shadow-2xs hover:shadow-xs active:scale-95 transition-all disabled:opacity-60"
+            title="Recalculate contract dates based on effective date and term"
+          >
+            <RefreshCw
+              className={`w-3.5 h-3.5 mr-1.5 text-slate-500 ${isRecalculatingDates ? "animate-spin" : ""}`}
+            />
+            {isRecalculatingDates ? "Recalculating..." : "Recalculate dates"}
           </button>
 
           <Link
@@ -889,18 +920,31 @@ export const ReviewPage: React.FC = () => {
                     </div>
 
                     {/* Calculated Dates & Override Box */}
-                    {(item.calculatedDate || item.manualDateOverride) && (
+                    {(item.calculatedDate ||
+                      item.manualDateOverride ||
+                      item.dateResolutionStatus === "needs_input" ||
+                      item.dateResolutionReason ||
+                      item.itemType === "effective_date" ||
+                      item.itemType === "expiry" ||
+                      item.itemType === "renewal" ||
+                      item.itemType === "notice") && (
                       <div
                         className={`mt-3.5 p-3 rounded-xl border flex flex-wrap items-center justify-between gap-3 text-xs shadow-2xs ${
                           item.manualDateOverride
                             ? "bg-gradient-to-r from-amber-50/60 to-slate-50 border-amber-200/90"
-                            : "bg-gradient-to-r from-sky-50/50 to-slate-50 border-sky-100/80"
+                            : item.calculatedDate
+                            ? "bg-gradient-to-r from-sky-50/50 to-slate-50 border-sky-100/80"
+                            : "bg-gradient-to-r from-amber-50/40 to-slate-50 border-amber-200/70"
                         }`}
                       >
                         <div className="flex items-center space-x-2.5">
                           <Calendar
                             className={`w-4 h-4 shrink-0 ${
-                              item.manualDateOverride ? "text-amber-600" : "text-sky-600"
+                              item.manualDateOverride
+                                ? "text-amber-600"
+                                : item.calculatedDate
+                                ? "text-sky-600"
+                                : "text-amber-500"
                             }`}
                           />
                           <div>
@@ -914,16 +958,23 @@ export const ReviewPage: React.FC = () => {
                                   {item.manualDateOverride}
                                 </span>
                               </div>
-                            ) : (
+                            ) : item.calculatedDate ? (
                               <div className="flex items-center flex-wrap gap-1.5">
                                 <span className="font-semibold text-slate-600">Calculated Deadline:</span>
                                 <span className="font-mono text-slate-900 font-bold bg-white px-2 py-0.5 rounded border border-slate-200/70 shadow-2xs">
                                   {item.calculatedDate}
                                 </span>
                               </div>
+                            ) : (
+                              <div className="flex items-center flex-wrap gap-1.5">
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-300/80">
+                                  Date Unresolved
+                                </span>
+                                <span className="font-medium text-slate-600">Needs manual input</span>
+                              </div>
                             )}
 
-                            <div className="text-[11px] text-slate-500 mt-1 flex items-center flex-wrap gap-x-2">
+                            <div className="text-[11px] text-slate-500 mt-1 flex items-center flex-wrap gap-x-2 gap-y-1">
                               {item.manualDateOverride && item.calculatedDate && (
                                 <span className="text-slate-500">
                                   (Calculated from clause: <strong className="font-mono font-semibold text-slate-700">{item.calculatedDate}</strong>)
@@ -936,7 +987,9 @@ export const ReviewPage: React.FC = () => {
                                 </span>
                               )}
                               {item.dateResolutionReason && (
-                                <span>{item.dateResolutionReason}</span>
+                                <span className="text-amber-800 font-medium bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                                  {item.dateResolutionReason}
+                                </span>
                               )}
                             </div>
                           </div>
@@ -1019,7 +1072,7 @@ export const ReviewPage: React.FC = () => {
                               }}
                               className="text-xs font-bold text-sky-600 hover:text-sky-800 hover:underline px-2.5 py-1 rounded-lg hover:bg-sky-50/80 transition-colors"
                             >
-                              {item.manualDateOverride ? "Change Date" : "Override Date"}
+                              {item.manualDateOverride ? "Change Date" : item.calculatedDate ? "Override Date" : "Set Date"}
                             </button>
                             {item.manualDateOverride && (
                               <button

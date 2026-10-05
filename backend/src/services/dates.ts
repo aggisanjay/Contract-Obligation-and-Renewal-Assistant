@@ -127,8 +127,18 @@ export function computeExpiryDate(
     };
   }
 
-  const totalMonths =
-    (options.termMonths || 0) + (options.termYears ? options.termYears * 12 : 0);
+  let totalMonths = 0;
+  if (options.termMonths && options.termYears) {
+    if (options.termMonths === options.termYears * 12) {
+      totalMonths = options.termMonths;
+    } else {
+      totalMonths = options.termMonths + options.termYears * 12;
+    }
+  } else if (options.termMonths) {
+    totalMonths = options.termMonths;
+  } else if (options.termYears) {
+    totalMonths = options.termYears * 12;
+  }
 
   if (totalMonths <= 0) {
     return {
@@ -564,6 +574,92 @@ export function extractTermFromText(text: string): { months?: number; years?: nu
   return null;
 }
 
+const NATURAL_MONTHS: Record<string, number> = {
+  january: 1, jan: 1,
+  february: 2, feb: 2,
+  march: 3, mar: 3,
+  april: 4, apr: 4,
+  may: 5,
+  june: 6, jun: 6,
+  july: 7, jul: 7,
+  august: 8, aug: 8,
+  september: 9, sep: 9, sept: 9,
+  october: 10, oct: 10,
+  november: 11, nov: 11,
+  december: 12, dec: 12,
+};
+
+const MONTH_PATTERN_PART =
+  "january|jan\\.?|february|feb\\.?|march|mar\\.?|april|apr\\.?|may|june|jun\\.?|july|jul\\.?|august|aug\\.?|september|sep\\.?|sept\\.?|october|oct\\.?|november|nov\\.?|december|dec\\.?";
+
+const PATTERN_MONTH_FIRST = new RegExp(
+  `\\b(${MONTH_PATTERN_PART})\\s+(\\d{1,2})(?:st|nd|rd|th)?[,\\s]+(\\d{4})\\b`,
+  "i"
+);
+
+const PATTERN_DAY_FIRST = new RegExp(
+  `\\b(?:the\\s+)?(\\d{1,2})(?:st|nd|rd|th)?(?:\\s+day\\s+of|\\s+of)?\\s+(${MONTH_PATTERN_PART})[,\\s]+(\\d{4})\\b`,
+  "i"
+);
+
+/**
+ * Deterministically parses natural written English dates (e.g. "January 15, 2026", "Jan. 5th, 2027",
+ * "15 January 2026", "the 3rd day of March, 2027") into ISO "YYYY-MM-DD" format.
+ * Returns null for impossible dates (e.g. February 30) and ambiguous numeric dates (e.g. 01/02/2026).
+ */
+export function parseNaturalDate(text: string | null | undefined): string | null {
+  if (!text || typeof text !== "string") return null;
+
+  // Reject ambiguous numeric dates like 01/02/2026, 12-05-2025
+  if (/^\s*\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\s*$/.test(text)) {
+    return null;
+  }
+
+  let monthStr: string | undefined;
+  let dayStr: string | undefined;
+  let yearStr: string | undefined;
+
+  const matchMonthFirst = text.match(PATTERN_MONTH_FIRST);
+  if (matchMonthFirst && matchMonthFirst[1] && matchMonthFirst[2] && matchMonthFirst[3]) {
+    monthStr = matchMonthFirst[1];
+    dayStr = matchMonthFirst[2];
+    yearStr = matchMonthFirst[3];
+  } else {
+    const matchDayFirst = text.match(PATTERN_DAY_FIRST);
+    if (matchDayFirst && matchDayFirst[1] && matchDayFirst[2] && matchDayFirst[3]) {
+      dayStr = matchDayFirst[1];
+      monthStr = matchDayFirst[2];
+      yearStr = matchDayFirst[3];
+    }
+  }
+
+  if (!monthStr || !dayStr || !yearStr) return null;
+
+  const cleanMonth = monthStr.toLowerCase().replace(/\./g, "");
+  const month = NATURAL_MONTHS[cleanMonth];
+  const day = parseInt(dayStr, 10);
+  const year = parseInt(yearStr, 10);
+
+  if (!month || isNaN(day) || isNaN(year) || year < 1000 || year > 9999 || day < 1 || day > 31) {
+    return null;
+  }
+
+  // Validate calendar integrity (reject impossible dates like Feb 30 or April 31)
+  const d = new Date(Date.UTC(year, month - 1, day));
+  if (
+    d.getUTCFullYear() !== year ||
+    d.getUTCMonth() !== month - 1 ||
+    d.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  const yyyy = String(year).padStart(4, "0");
+  const mm = String(month).padStart(2, "0");
+  const dd = String(day).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 export function extractNoticeDaysFromText(text: string): number | null {
   if (!text) return null;
   const normalized = text.toLowerCase();
@@ -625,15 +721,44 @@ export function resolveItemCalculatedDate(
 
   // 1. Effective date
   if (item.itemType === "effective_date") {
-    const dateVal = typeof payload.date === "string" ? payload.date : null;
+    // (1) payload.date if valid ISO
+    const dateVal = typeof payload.date === "string" ? payload.date.trim() : null;
     if (dateVal && isValidDateString(dateVal)) {
       return { calculatedDate: dateVal, status: "resolved", dateSource: "ai_payload" };
     }
-    // Try YYYY-MM-DD in quote
+
+    // (2) parseNaturalDate(payload.date)
+    if (dateVal) {
+      const parsedNatural = parseNaturalDate(dateVal);
+      if (parsedNatural) {
+        return { calculatedDate: parsedNatural, status: "resolved", dateSource: "ai_payload" };
+      }
+    }
+
+    // (3) if payload.isRelative === true, return needs_input and NEVER guess from stray dates in the quote
+    if (payload.isRelative === true) {
+      return {
+        status: "needs_input",
+        calculatedDate: null,
+        reason: "Effective date is relative (for example, the date of last signature). Confirm the date manually.",
+      };
+    }
+
+    // (4) ISO date in the quote (dateSource derived_from_quote)
     const isoMatch = quote.match(/\b(\d{4}-\d{2}-\d{2})\b/);
     if (isoMatch && isoMatch[1] && isValidDateString(isoMatch[1])) {
       return { calculatedDate: isoMatch[1], status: "resolved", dateSource: "derived_from_quote" };
     }
+
+    // (5) parseNaturalDate(quote) (dateSource derived_from_quote)
+    if (quote) {
+      const quoteNatural = parseNaturalDate(quote);
+      if (quoteNatural) {
+        return { calculatedDate: quoteNatural, status: "resolved", dateSource: "derived_from_quote" };
+      }
+    }
+
+    // (6) otherwise needs_input "Effective date could not be parsed."
     return { status: "needs_input", calculatedDate: null, reason: "Effective date could not be parsed." };
   }
 

@@ -15,6 +15,7 @@ vi.mock("../services/api.js", async (importOriginal) => {
     resolveStaleItem: vi.fn(),
     bulkApproveItems: vi.fn(),
     deleteContract: vi.fn(),
+    recalculateContractDates: vi.fn(),
   };
 });
 
@@ -241,6 +242,79 @@ describe("ReviewPage Component - Human-in-the-Loop Workflows", () => {
         "reconfirm",
         ""
       );
+    });
+  });
+
+  it("triggers recalculateContractDates when clicking Recalculate dates button", async () => {
+    vi.mocked(api.getContract).mockResolvedValue(mockContractData);
+    vi.mocked(api.recalculateContractDates).mockResolvedValue({
+      success: true,
+      updatedCount: 2,
+      unchangedCount: 1,
+      stillNeedsInput: [],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/contracts/contract-123/review"]}>
+        <Routes>
+          <Route path="/contracts/:id/review" element={<ReviewPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Recalculate dates/i })).toBeInTheDocument();
+    });
+
+    const recalcBtn = screen.getByRole("button", { name: /Recalculate dates/i });
+    fireEvent.click(recalcBtn);
+
+    await waitFor(() => {
+      expect(api.recalculateContractDates).toHaveBeenCalledWith("contract-123", "ver-1");
+    });
+  });
+
+  it("renders derived_from_quote badge and dateResolutionReason on unresolved cards", async () => {
+    const dataWithSpecialDates: ContractDetailsResponse = {
+      ...mockContractData,
+      activeVersion: {
+        ...mockContractData.activeVersion,
+        extractedItems: [
+          {
+            ...mockItem,
+            id: "item-derived",
+            calculatedDate: "2026-01-15",
+            dateSource: "derived_from_quote",
+            dateResolutionReason: null,
+          },
+          {
+            ...mockItem,
+            id: "item-unresolved",
+            calculatedDate: null,
+            manualDateOverride: null,
+            dateResolutionStatus: "needs_input",
+            dateResolutionReason: "Effective date is relative. Confirm manually.",
+            dateSource: "ai_payload",
+          },
+        ],
+      },
+    };
+
+    vi.mocked(api.getContract).mockResolvedValue(dataWithSpecialDates);
+
+    render(
+      <MemoryRouter initialEntries={["/contracts/contract-123/review"]}>
+        <Routes>
+          <Route path="/contracts/:id/review" element={<ReviewPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Derived from clause text\. Please verify\./i)).toBeInTheDocument();
+      expect(screen.getByText(/Effective date is relative\. Confirm manually\./i)).toBeInTheDocument();
+      expect(screen.getByText(/Date Unresolved/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Set Date/i })).toBeInTheDocument();
     });
   });
 });

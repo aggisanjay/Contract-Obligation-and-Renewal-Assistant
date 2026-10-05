@@ -67,7 +67,8 @@ export function verifyCitation(
   const targetSection =
     (citedSectionId ? allSections.find((s) => s.id === citedSectionId) : null) ||
     allSections.find((s) => s.label.toLowerCase() === normalizedCitedLabel) ||
-    allSections.find((s) => s.label.toLowerCase().startsWith(normalizedCitedLabel));
+    allSections.find((s) => s.label.toLowerCase().startsWith(normalizedCitedLabel)) ||
+    allSections.find((s) => normalizedCitedLabel.startsWith(s.label.toLowerCase()));
 
   if (targetSection) {
     const normalizedTargetText = normalizeForCitation(targetSection.text);
@@ -86,6 +87,20 @@ export function verifyCitation(
   for (const section of allSections) {
     const normalizedSecText = normalizeForCitation(section.text);
     if (normalizedSecText.includes(normalizedQuote)) {
+      const isParentOrChild =
+        normalizedCitedLabel.startsWith(section.label.toLowerCase()) ||
+        section.label.toLowerCase().startsWith(normalizedCitedLabel);
+
+      if (isParentOrChild) {
+        return {
+          accepted: true,
+          citationVerified: true,
+          matchedSectionId: section.id,
+          matchedSectionLabel: section.label,
+          warning: null,
+        };
+      }
+
       return {
         accepted: true,
         citationVerified: false,

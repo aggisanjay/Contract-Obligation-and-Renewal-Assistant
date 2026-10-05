@@ -306,3 +306,28 @@ export async function deleteContract(
   return data;
 }
 
+export interface RecalculateDatesResponse {
+  success: boolean;
+  updatedCount: number;
+  unchangedCount: number;
+  stillNeedsInput: Array<{ itemId: string; itemType: string; reason: string }>;
+}
+
+export async function recalculateContractDates(
+  contractId: string,
+  contractVersionId?: string
+): Promise<RecalculateDatesResponse> {
+  const res = await fetch(`${API_BASE}/contracts/${contractId}/recalculate-dates`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contractVersionId }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    const errorMsg = data?.error?.message || "Failed to recalculate dates";
+    const reqId = data?.error?.requestId ? ` (Request ID: ${data.error.requestId})` : "";
+    throw new Error(`${errorMsg}${reqId}`);
+  }
+  return data;
+}
+

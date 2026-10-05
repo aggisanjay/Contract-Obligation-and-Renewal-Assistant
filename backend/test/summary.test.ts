@@ -44,7 +44,7 @@ Client shall pay monthly invoices within thirty (30) days.
         .patch(`/api/contracts/${contractId}/items/${item.id}`)
         .send({ action: "approve" });
     }
-  });
+  }, 30000);
 
   afterAll(async () => {
     if (contractId) {

@@ -102,6 +102,37 @@ A final concluding paragraph with no distinct titles or section markers.
     expect(sections[1]?.page).toBe(2);
     expect(sections[2]?.page).toBe(2);
   });
+
+  it("verifies citations to sub-clauses (e.g. Section 2.1) residing in parent sections without false warnings", async () => {
+    const { verifyCitation } = await import("../src/services/citationVerifier.js");
+    const mockSections = [
+      {
+        id: "sec-2",
+        contractVersionId: "ver-1",
+        sectionIndex: 1,
+        label: "Section 2",
+        heading: "Term & Renewal",
+        text: "The initial term is 12 months. This Agreement shall automatically renew for additional one-year terms.",
+        page: 1,
+        charStart: 0,
+        charEnd: 110,
+        documentType: "contract" as const,
+      },
+    ];
+
+    // Citing subclause "Section 2.1" where the text is in "Section 2"
+    const result = verifyCitation(
+      "This Agreement shall automatically renew for additional one-year terms.",
+      "Section 2.1",
+      null,
+      mockSections
+    );
+
+    expect(result.accepted).toBe(true);
+    expect(result.citationVerified).toBe(true);
+    expect(result.warning).toBeNull();
+    expect(result.matchedSectionId).toBe("sec-2");
+  });
 });
 
 describe("Ingestion Service", () => {

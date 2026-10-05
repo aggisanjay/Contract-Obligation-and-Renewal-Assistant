@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { ReviewStatus, ItemType, ExtractionStatus } from "@contract-assistant/shared";
 import { prisma } from "../../models/prisma.js";
 import { compileReviewedSummary } from "../../services/summaryCompiler.js";
+import { recomputeVersionDates } from "../../services/dateRecalculator.js";
 import { NotFoundError, BadRequestError } from "../../utils/errors.js";
 
 export async function summaryRoutes(app: FastifyInstance) {
@@ -39,11 +40,16 @@ export async function summaryRoutes(app: FastifyInstance) {
     const latestSummary = contract.summaries[0];
 
     if (!latestSummary) {
-      // Auto-generate on first request
+      // Recalculate dates and auto-generate summary on first request
+      await recomputeVersionDates(prisma, latestVersion.id);
+      const freshItems = await prisma.extractedItem.findMany({
+        where: { contractVersionId: latestVersion.id },
+      });
+
       const compiled = compileReviewedSummary(
         contract.title,
         latestVersion.versionNumber,
-        latestVersion.extractedItems.map((i) => ({
+        freshItems.map((i) => ({
           ...i,
           sourceSectionId: i.sourceSectionId,
           sourceSectionLabel: i.sourceSectionLabel,
@@ -118,10 +124,17 @@ export async function summaryRoutes(app: FastifyInstance) {
     if (!latestVersion) {
       throw new BadRequestError(`Contract with id ${id} has no ingested versions yet.`);
     }
+
+    // Automatically recalculate dates right before the reviewed summary is generated
+    await recomputeVersionDates(prisma, latestVersion.id);
+    const freshItems = await prisma.extractedItem.findMany({
+      where: { contractVersionId: latestVersion.id },
+    });
+
     const compiled = compileReviewedSummary(
       contract.title,
       latestVersion.versionNumber,
-      latestVersion.extractedItems.map((i) => ({
+      freshItems.map((i) => ({
         ...i,
         sourceSectionId: i.sourceSectionId,
         sourceSectionLabel: i.sourceSectionLabel,

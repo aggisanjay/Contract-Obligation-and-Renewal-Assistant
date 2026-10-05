@@ -92,12 +92,14 @@ To guarantee safety, auditability, and zero hallucinated dates, probabilistic AI
 | **Entity & Obligation Candidate Identification** | ✅ Multi-pass targeted prompts | ❌ |
 | **Legal Guardrail Filtering** | ❌ | ✅ Deterministically scrubs advisory phrases |
 | **Source Citation Verification** | ❌ | ✅ Verbatim quote matching + Unicode normalization |
+| **Natural Written-Date Parsing** | ❌ | ✅ Regex & calendar validation (`parseNaturalDate`) |
+| **Cascading Date Resolution** | ❌ | ✅ Topological dependency recalculation (`recomputeVersionDates`) |
 | **Expiry & Notice Date Arithmetic** | ❌ | ✅ `date-fns` UTC, month-end clamping, leap years |
 | **Notification Reminder Schedules** | ❌ | ✅ Pure math (e.g. expiry minus notice days minus lead time) |
 | **Review State & Monotonic Audit History** | ❌ | ✅ PostgreSQL transactions with user changes |
 | **Bulk Approval Safeguards** | ❌ | ✅ Blocks unverified quotes or confidence < 0.80 |
 | **Version Section Diffing & Stale Item Detection** | ❌ | ✅ Token similarity matching (threshold ≥ 0.98) |
-| **Compiled Contract Summary** | ❌ | ✅ Strict approved-only whitelist with verbatim citations |
+| **Compiled Contract Summary** | ❌ | ✅ Strict approved-only whitelist with 5-state wording |
 
 ---
 
@@ -120,16 +122,16 @@ The system connects directly to **Hugging Face Serverless Inference / Router API
 │   │   └── schema.prisma           # Database schema (Contracts, Versions, Sections, Items, Audit, Summary)
 │   ├── src/
 │   │   ├── api/                    # REST routes (contracts, dashboard, versions, summaries, health)
-│   │   ├── llm/                    # Multi-provider client (Gemini, Groq, HF, Mock), guardrails, prompts
-│   │   ├── services/               # Ingestion (PDF coordinate reconstruction, DOCX), citations, dates, stale detection
+│   │   ├── llm/                    # Hugging Face Qwen 2.5 client & MockLLMClient, guardrails, prompts
+│   │   ├── services/               # Ingestion (PDF, DOCX), citations, dates.ts, dateRecalculator.ts, summaryCompiler.ts
 │   │   └── utils/                  # Structured Pino logger, AppError classes
-│   └── test/                       # 13 Vitest suites (102 passing unit & integration tests)
+│   └── test/                       # 17 Vitest suites (126 passing unit & integration tests)
 ├── frontend/                       # React 18 + TypeScript + Vite + Tailwind CSS
 │   ├── src/
 │   │   ├── components/             # Header, LegalDisclaimerBanner, Modals (UploadVersion, VersionDiff)
-│   │   ├── pages/                  # UploadPage (5-pass stepper), ReviewPage (stale queue), Dashboard, Summary
+│   │   ├── pages/                  # UploadPage, ReviewPage (split-screen, recalculate dates), Dashboard, Summary
 │   │   ├── services/               # Type-safe API client (defaults to same-origin /api)
-│   │   └── test/                   # 6 Vitest component suites (15 passing tests)
+│   │   └── test/                   # 7 Vitest component suites (19 passing tests)
 ├── samples/                        # Realistic sample contracts (.pdf, .docx, .txt) & policy documents
 │   ├── sample_contract_cloud_services.pdf
 │   ├── sample_contract_cloud_services_v2.pdf

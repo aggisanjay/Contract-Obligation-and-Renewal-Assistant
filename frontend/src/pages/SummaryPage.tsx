@@ -21,6 +21,41 @@ import {
 } from "lucide-react";
 import { useToast } from "../context/ToastContext.js";
 
+function renderDateStatusBadge(val: string | null) {
+  const text = val || "Not found in contract";
+  const isDate = /^\d{4}-\d{2}-\d{2}$/.test(text);
+
+  if (isDate) {
+    return <span className="text-base font-bold text-slate-900 font-mono">{text}</span>;
+  }
+  if (text.startsWith("Needs input:")) {
+    return (
+      <span className="inline-block text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200/80 px-2.5 py-1 rounded-lg mt-1.5 leading-snug">
+        {text}
+      </span>
+    );
+  }
+  if (text === "Pending review") {
+    return (
+      <span className="inline-block text-xs font-semibold text-sky-700 bg-sky-50 border border-sky-200/80 px-2.5 py-1 rounded-lg mt-1.5">
+        Pending review
+      </span>
+    );
+  }
+  if (text.includes("Not applicable")) {
+    return (
+      <span className="inline-block text-xs font-medium text-slate-500 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg mt-1.5">
+        {text}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-block text-xs font-medium text-slate-400 bg-slate-50 border border-slate-200/60 px-2.5 py-1 rounded-lg mt-1.5">
+      {text}
+    </span>
+  );
+}
+
 export const SummaryPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const toast = useToast();
@@ -233,21 +268,21 @@ export const SummaryPage: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
             <div className="p-4 bg-slate-50/60 border border-slate-200/80 rounded-2xl shadow-2xs">
               <span className="text-slate-500 font-bold uppercase tracking-wider text-[10px] font-heading">Effective Date</span>
-              <p className="text-base font-bold text-slate-900 mt-1.5 font-mono">
-                {compiled.keyDates.effectiveDate || "Not confirmed"}
-              </p>
+              <div className="mt-1.5">
+                {renderDateStatusBadge(compiled.keyDates.effectiveDate)}
+              </div>
             </div>
             <div className="p-4 bg-slate-50/60 border border-slate-200/80 rounded-2xl shadow-2xs">
               <span className="text-slate-500 font-bold uppercase tracking-wider text-[10px] font-heading">Contract Expiry Date</span>
-              <p className="text-base font-bold text-slate-900 mt-1.5 font-mono">
-                {compiled.keyDates.expiryDate || "Not confirmed"}
-              </p>
+              <div className="mt-1.5">
+                {renderDateStatusBadge(compiled.keyDates.expiryDate)}
+              </div>
             </div>
             <div className="p-4 bg-slate-50/60 border border-slate-200/80 rounded-2xl shadow-2xs">
               <span className="text-slate-500 font-bold uppercase tracking-wider text-[10px] font-heading">Notice Deadline</span>
-              <p className="text-base font-bold text-slate-900 mt-1.5 font-mono">
-                {compiled.keyDates.noticeDeadline || "Not confirmed"}
-              </p>
+              <div className="mt-1.5">
+                {renderDateStatusBadge(compiled.keyDates.noticeDeadline)}
+              </div>
             </div>
           </div>
           {compiled.keyDates.citation && (

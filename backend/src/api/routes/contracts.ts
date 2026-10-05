@@ -6,11 +6,12 @@ import {
   applyManualOverride,
   resolveItemCalculatedDate,
 } from "../../services/dates.js";
+import { recomputeVersionDates } from "../../services/dateRecalculator.js";
 import {
   ReviewItemActionSchema,
   BulkApproveRequestSchema,
 } from "@contract-assistant/shared";
-import { NotFoundError, AppError } from "../../utils/errors.js";
+import { NotFoundError, AppError, BadRequestError } from "../../utils/errors.js";
 import { getLLMClient } from "../../llm/client.js";
 import { logger } from "../../utils/logger.js";
 import { z } from "zod";
@@ -434,63 +435,14 @@ export async function contractRoutes(app: FastifyInstance) {
       throw err;
     }
 
-    // If effective_date or expiry/term changed or was overridden, cascade date updates
-    if (item.itemType === "effective_date" || item.itemType === "expiry" || item.itemType === "term") {
-      const allItems = await prisma.extractedItem.findMany({
-        where: { contractVersionId: item.contractVersionId },
-      });
-
-      const eff = allItems.find((i) => i.itemType === "effective_date");
-      const activeEffDate = eff ? (eff.id === item.id ? (manualDateOverride || calculatedDate) : (eff.manualDateOverride || eff.calculatedDate)) : null;
-
-      const exp = allItems.find((i) => i.itemType === "expiry" || i.itemType === "term");
-      let activeExpDate = exp ? (exp.id === item.id ? (manualDateOverride || calculatedDate) : (exp.manualDateOverride || exp.calculatedDate)) : null;
-
-      // Recompute expiry if not overridden and effDate changed
-      if (exp && exp.id !== item.id && !exp.manualDateOverride && activeEffDate) {
-        const expRes = resolveItemCalculatedDate(exp, { effectiveDate: activeEffDate });
-        if (expRes.calculatedDate && expRes.calculatedDate !== exp.calculatedDate) {
-          activeExpDate = expRes.calculatedDate;
-          try {
-            await prisma.extractedItem.update({
-              where: { id: exp.id },
-              data: {
-                calculatedDate: expRes.calculatedDate,
-                dateResolutionStatus: expRes.status,
-                dateResolutionReason: expRes.reason,
-                dateSource: expRes.dateSource || exp.dateSource,
-              },
-            });
-          } catch (err) {
-            logger.error({ err, expId: exp.id }, "Cascade expiry date update failed");
-          }
-        }
-      }
-
-      // Recompute dependent renewal/notice items and obligations
-      for (const other of allItems) {
-        if (other.id === item.id) continue;
-        if (other.manualDateOverride) continue; // Respect existing manual overrides!
-
-        if (other.itemType === "renewal" || other.itemType === "notice" || other.itemType === "obligation") {
-          const res = resolveItemCalculatedDate(other, { effectiveDate: activeEffDate, expiryDate: activeExpDate });
-          if (res.calculatedDate && res.calculatedDate !== other.calculatedDate) {
-            try {
-              await prisma.extractedItem.update({
-                where: { id: other.id },
-                data: {
-                  calculatedDate: res.calculatedDate,
-                  dateResolutionStatus: res.status,
-                  dateResolutionReason: res.reason,
-                  dateSource: res.dateSource || other.dateSource,
-                },
-              });
-            } catch (err) {
-              logger.error({ err, otherId: other.id }, "Cascade dependent date update failed");
-            }
-          }
-        }
-      }
+    // If effective_date, expiry/term, or renewal/notice changed or was overridden, cascade date updates cleanly
+    if (
+      item.itemType === "effective_date" ||
+      item.itemType === "expiry" ||
+      item.itemType === "term" ||
+      body.action === "override_date"
+    ) {
+      await recomputeVersionDates(prisma, item.contractVersionId);
     }
 
     // Create Audit Log
@@ -740,6 +692,41 @@ export async function contractRoutes(app: FastifyInstance) {
       step,
       addedCount: createdItems.length,
       stepErrors: pipelineResult.stepErrors,
+    });
+  });
+
+  /**
+   * Recalculate and synchronize dates across all items in active contract version
+   */
+  app.post("/api/contracts/:id/recalculate-dates", async (req: FastifyRequest, reply: FastifyReply) => {
+    const { id } = req.params as { id: string };
+
+    const contract = await prisma.contract.findUnique({
+      where: { id },
+      include: {
+        versions: {
+          orderBy: { versionNumber: "desc" },
+          take: 1,
+        },
+      },
+    });
+
+    if (!contract) {
+      throw new NotFoundError(`Contract with id ${id} not found.`);
+    }
+
+    const activeVersion = contract.versions[0];
+    if (!activeVersion) {
+      throw new BadRequestError(`Contract with id ${id} has no ingested versions yet.`);
+    }
+
+    const result = await recomputeVersionDates(prisma, activeVersion.id);
+
+    return reply.status(200).send({
+      success: true,
+      contractId: id,
+      versionId: activeVersion.id,
+      ...result,
     });
   });
 }
