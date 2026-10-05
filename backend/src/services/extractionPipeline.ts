@@ -318,7 +318,6 @@ export async function runExtractionPipeline(
   // ----------------------------------------------------
   if (!options?.onlyStep || options.onlyStep === "ambiguities_and_conflicts") {
     const startTimeStep4 = Date.now();
-    let ambiguitiesSummary = "";
     try {
       const prompt = buildAmbiguitiesPrompt(promptContext, policyText);
       const result = await client.generateStructured(
@@ -345,7 +344,6 @@ export async function runExtractionPipeline(
           citationWarning: null,
           originalPayload: amb,
         });
-        ambiguitiesSummary += `- ${amb.issueType}: ${amb.description} (${amb.sourceSectionLabel})\n`;
       }
 
       logPipelineStep(requestId, "ambiguities_and_conflicts", {

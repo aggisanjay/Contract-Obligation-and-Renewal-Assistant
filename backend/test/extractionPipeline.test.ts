@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { DocumentSection } from "@contract-assistant/shared";
-import { verifyCitation, normalizeForCitation } from "../src/services/citationVerifier.js";
+import { verifyCitation } from "../src/services/citationVerifier.js";
 import { sanitizeAdvisoryContent, sanitizePayloadRecursively } from "../src/llm/guardrailFilter.js";
 import { runExtractionPipeline } from "../src/services/extractionPipeline.js";
 import { MockLLMClient } from "../src/llm/client.js";
@@ -216,7 +216,6 @@ describe("AI Extraction Pipeline Execution", () => {
   });
 
   it("downgrades hallucinated citations to uncertain during pipeline run", async () => {
-    const defaultMock = new MockLLMClient();
     const mockClient = new MockLLMClient((prompt) => {
       const lower = prompt.toLowerCase();
       if (lower.includes("parties") || lower.includes("effective date")) {

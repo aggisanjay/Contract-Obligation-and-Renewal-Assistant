@@ -34,7 +34,7 @@ Client shall pay monthly invoices within 30 days.
     // Approve one item so it becomes a firm deadline
     const contractRes = await request(app.server).get(`/api/contracts/${contractId}`);
     const expiryItem = contractRes.body.activeVersion.extractedItems.find(
-      (i: any) => i.itemType === "expiry"
+      (i: { itemType: string }) => i.itemType === "expiry"
     );
     if (expiryItem) {
       await request(app.server)

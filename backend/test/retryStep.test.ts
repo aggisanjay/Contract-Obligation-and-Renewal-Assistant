@@ -56,7 +56,7 @@ Payment is due net 30 days.
     // Verify audit log has the retry action
     const auditRes = await request(app.server).get(`/api/contracts/${contractId}/audit-log`);
     expect(auditRes.status).toBe(200);
-    const retryLog = auditRes.body.logs.find((l: any) => l.action === "step_retried");
+    const retryLog = auditRes.body.logs.find((l: { action: string }) => l.action === "step_retried");
     expect(retryLog).toBeDefined();
     expect(retryLog.note).toContain("term_and_renewal");
   });

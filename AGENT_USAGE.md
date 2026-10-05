@@ -1,123 +1,211 @@
 # AGENT_USAGE.md: AI Agent System Architecture & Operational Guide
 
-This document specifies the internal architecture of the AI agents within the **Contract Obligation & Renewal Assistant**, covering prompt versioning, deterministic safety filters, multi-provider rate-limit rollover, verbatim citation verification, and human-in-the-loop review touchpoints.
+This document records the operational usage of AI agents within the **Contract Obligation & Renewal Assistant**, detailing the tools utilized, representative prompts, delegated responsibilities, documented mistakes and rejected suggestions, and multi-layer verification procedures.
+
+For the full architectural pipeline and multi-provider rollover documentation, refer to [`docs/AI_PIPELINE.md`](file:///c:/Users/aggis/Desktop/Contract%20Obligation%20and%20Renewal%20Assistant/docs/AI_PIPELINE.md).
 
 ---
 
-## 1. System Positioning & Core Safety Directives
+## 1. Tools Used
 
-The AI extraction system operates strictly as an **information-retrieval and structuring engine**. It is explicitly barred from acting as legal counsel, interpreting legal enforceability, or providing advisory opinions.
+The engineering and runtime lifecycle leverages the following tool stack:
 
-### System Prompt Directive
-Every agent prompt incorporates the following immutable directive:
+| Category | Tools & Libraries | Operational Role |
+| :--- | :--- | :--- |
+| **Development & Coding Assistant** | Antigravity AI Coding Agent | Autonomous code generation, test-driven refactoring, workspace orchestration |
+| **LLM Inference Providers** | Google Gemini (`gemini-2.5-flash`), Groq (`llama-3.3-70b-versatile`), Hugging Face (`Qwen/Qwen2.5-72B-Instruct`) | Primary and fallback contract extraction engines |
+| **Mock LLM Provider** | `MockLLMClient` (`backend/src/llm/mockClient.ts`) | Offline deterministic test harness and zero-API demo mode |
+| **Runtime & Language** | Node.js v24.18.0, TypeScript v5.7.3 | Core execution runtime and static type checking |
+| **Backend Framework & ORM** | Fastify v5, Prisma ORM v6.4, Neon PostgreSQL | REST API server, database modeling, migrations, connection pooling |
+| **Frontend Framework & Styling** | Vite v6, React 18, TailwindCSS, Lucide React | Single-page application, interactive split-screen review, responsive dashboard |
+| **Document Ingestion** | `pdfjs-dist` v4.10, `mammoth` v1.9, `date-fns` v4.1 | PDF parsing, DOCX text extraction, calendar date calculations |
+| **Quality & Verification** | Vitest v3, Supertest v7, ESLint v10, `typescript-eslint` v8 | Automated unit/integration test suites, static analysis, CI gate |
+
+---
+
+## 2. Representative Prompts
+
+The assistant decomposes contract analysis into 5 specialized extraction passes rather than relying on an error-prone monolithic prompt. Every pass is preceded by a strict non-advisory system directive.
+
+### Core System Directive (Injected into Every Agent Pass)
 ```text
 You are an information extraction assistant. Your job is to extract factual clauses, dates, and obligations from legal contracts.
 You MUST NOT provide legal advice, opinion on fairness, legal enforceability, or recommendations to renegotiate.
 Extract ONLY what is explicitly stated with exact verbatim source quotes.
 ```
 
-### Deterministic Post-Filter Guardrail
-Even if an underlying model outputs suggestive legal language, the deterministic post-filter (`backend/src/llm/guardrailFilter.ts`) inspects every text field before database persistence. Any phrasing matching banned advisory patterns is automatically scrubbed or flagged:
-- `should renegotiate`
-- `we advise you to`
-- `this clause is unfair`
-- `legally invalid / void`
-- `seek immediate legal counsel`
+### Pass 1: Contracting Parties & Effective Date (`parties.v1.ts`)
+```text
+Analyze the provided contract sections and extract the contracting entities and effective date.
 
----
-
-## 2. Multi-Pass Agent Pipeline & Prompt Versioning
-
-Rather than issuing a monolithic prompt that induces hallucinations or misses fine-print deadlines, the agent pipeline is broken into five targeted, single-responsibility extraction passes:
-
-| Pass | Prompt Module | Extracted Output | Strict Constraints |
-| :--- | :--- | :--- | :--- |
-| **Pass 1: Parties & Effective Date** | `prompts/parties.v1.ts` | Contracting entities, corporate roles, effective date, governing jurisdiction | Exact entity names, exact section number, verbatim citation quote |
-| **Pass 2: Term & Renewal** | `prompts/termAndRenewal.v1.ts` | Initial term, expiration date, renewal type (`auto_renew`, `manual_opt_in`, `none`), advance notice days | Extract notice period in integer days; flag if notice method is specified |
-| **Pass 3: Obligations & Milestones** | `prompts/obligations.v1.ts` | Operational obligations, deliverables, payment terms, reporting requirements, recurrence pattern | Must associate each obligation with the responsible party and citation quote |
-| **Pass 4: Ambiguities & Conflicts** | `prompts/ambiguities.v1.ts` | Contradictory notice windows, vague standards of performance, policy discrepancies | Compare contract against uploaded policy guidelines; highlight conflicting clauses |
-| **Pass 5: Clarification Questions** | `prompts/clarificationQuestions.v1.ts` | Specific multiple-choice questions for human reviewers to resolve ambiguities | Concrete choices (e.g., choice between 30 days vs 60 days); no open-ended legal advice |
-
-All prompts require responses conforming to strict JSON schemas validated via **Zod** (`@contract-assistant/shared`).
-
----
-
-## 3. Multi-Provider LLM Fallback Chain (Zero Downtime)
-
-To eliminate extraction failures caused by provider rate limits (HTTP 429), token quota exhaustion, or temporary service outages (HTTP 503), the engine implements an automated fallback chain:
-
-```mermaid
-graph TD
-    A[Extraction Pass Request] --> B[Provider 1: Google Gemini]
-    B -->|Success 200 OK| G[Deterministic Guardrail & Citation Verifier]
-    B -->|429 Rate Limit / 503 Error| C[Log Warn & Rollover]
-    C --> D[Provider 2: Groq Llama 3.3]
-    D -->|Success 200 OK| G
-    D -->|429 Rate Limit / Error| E[Log Warn & Rollover]
-    E --> F[Provider 3: Hugging Face Qwen 2.5]
-    F -->|Success 200 OK| G
-    F -->|No Provider Keys Available| H[MockLLM Client Test/Demo Fallback]
-    H --> G
-    G --> I[(Persist to Database)]
+Output format (strict JSON):
+{
+  "parties": [
+    {
+      "name": "Exact Legal Entity Name",
+      "role": "Vendor | Customer | Partner | Licensor | Licensee | Other",
+      "sourceSectionLabel": "Section X.X",
+      "sourceQuote": "verbatim text identifying party"
+    }
+  ],
+  "effectiveDate": {
+    "dateString": "YYYY-MM-DD",
+    "isExplicit": true | false,
+    "sourceSectionLabel": "Section X.X",
+    "sourceQuote": "verbatim text defining effective date"
+  },
+  "governingLaw": {
+    "jurisdiction": "State / Country",
+    "sourceSectionLabel": "Section X.X",
+    "sourceQuote": "verbatim text defining governing law"
+  }
+}
 ```
 
-### Provider Configuration
-Providers are configured in `backend/.env`:
-1. `GEMINI_API_KEY` (Gemini 2.5 Flash / 1.5 Pro)
-2. `GROQ_API_KEY` (Llama 3.3 70B Versatile)
-3. `HUGGINGFACE_API_KEY` (Qwen 2.5 72B Instruct)
+### Pass 2: Term, Expiration & Renewal (`termAndRenewal.v1.ts`)
+```text
+Analyze the contract text for term length, expiration dates, renewal mechanisms, and non-renewal notice requirements.
 
-If one provider fails with rate-limiting, the pipeline immediately transfers the request to the next healthy provider without dropping the active user request.
+Strict constraints:
+- Set renewalType to: "auto_renew", "manual_opt_in", or "none".
+- noticePeriodDays must be an integer (e.g. 30, 45, 60).
+- sourceQuote must be an exact verbatim excerpt from the section.
+```
+
+### Pass 3: Operational Obligations & Milestones (`obligations.v1.ts`)
+```text
+Extract all affirmative and negative operational obligations, milestones, deliverables, payment terms, and reporting requirements.
+
+Strict constraints:
+- Associate each obligation with the responsibleParty ("Vendor", "Customer", etc.).
+- Categorize type: "payment", "deliverable", "reporting", "audit", "compliance", or "other".
+- Extract exact recurrence rule if applicable (e.g. "quarterly", "monthly", "within 15 days of quarter end").
+```
+
+### Pass 4: Ambiguities, Contradictions & Policy Conflicts (`ambiguities.v1.ts`)
+```text
+Identify contradictory clauses (e.g., conflicting notice windows in different sections), vague performance standards (e.g. "promptly", "best efforts"), or deviations from company procurement policy.
+Provide exact verbatim quotes for both conflicting provisions. Do NOT provide legal advice on which clause takes precedence.
+```
+
+### Pass 5: Multiple-Choice Clarification Questions (`clarificationQuestions.v1.ts`)
+```text
+Formulate actionable multiple-choice clarification questions for human reviewers to resolve identified ambiguities.
+Provide clear, concrete options (e.g., Option A: "30 calendar days notice", Option B: "60 calendar days notice").
+Do NOT formulate open-ended questions requiring legal analysis.
+```
 
 ---
 
-## 4. Verbatim Citation Verification Mechanism
+## 3. Delegated Work Breakdown
 
-To combat hallucination and ensure complete operational auditability, every extracted item must include:
-1. `sourceSectionId` (the ID of the containing section)
-2. `sourceSectionLabel` (e.g. `Section 4.1`)
-3. `sourceQuote` (an exact, verbatim excerpt from the section text)
+To ensure both scalability and auditability, responsibilities are cleanly bifurcated between AI models, deterministic code, and human reviewers:
 
-### Deterministic Verification Procedure (`citationVerifier.ts`):
-1. **Normalization:** Both the section text and the extracted quote undergo identical normalization:
-   - Normalize Unicode whitespace and strip non-printable characters.
-   - Collapse consecutive whitespace characters into a single space.
-   - Standardize straight and curly quotation marks (`"`, `'`, `“`, `”`).
-2. **Sub-string Locating:** The normalized quote is searched inside the normalized section text.
-3. **Offset Mapping:** The engine computes the exact character start (`charStart`) and end (`charEnd`) offsets within the section.
-4. **Verification Status:**
-   - If found: `citationVerified = true`, `confidenceScore = 0.95+`.
-   - If not found: `citationVerified = false`, `confidenceScore` is penalized, and the item is visually flagged in the review UI for manual inspection.
+```mermaid
+graph LR
+    subgraph AI Model Work
+        A1[Clause Classification]
+        A2[Entity Extraction]
+        A3[Ambiguity Identification]
+        A4[Clarification Formulations]
+    end
+
+    subgraph Deterministic Code
+        D1[Zod Schema Validation]
+        D2[Verbatim Citation Verification]
+        D3[Guardrail Advisory Filter]
+        D4[Date Math & Recurrence Rules]
+        D5[Stale Version Diff Detection]
+    end
+
+    subgraph Human Reviewer Touchpoints
+        H1[Candidate Item Approval / Rejection]
+        H2[Manual Date Overrides + Rationale]
+        H3[Ambiguity Selection]
+        H4[Stale Item Re-confirmation]
+    end
+
+    AI Model Work --> Deterministic Code
+    Deterministic Code --> Human Reviewer Touchpoints
+```
+
+1. **Delegated to AI Agent:**
+   - Unstructured text understanding across variable contract formats (PDF, DOCX, TXT).
+   - Entity recognition and role mapping.
+   - Initial candidate clause classification (Parties, Term, Obligations, Ambiguities).
+   - Formulating candidate clarification questions with discrete choices.
+
+2. **Handled Deterministically (Zero LLM Hallucination Risk):**
+   - Character offset mapping (`charStart`, `charEnd`) and string verification in `citationVerifier.ts`.
+   - Scrubbing and flagging banned advisory patterns in `guardrailFilter.ts`.
+   - Date recurrence calculation, calendar quarter/month-end offsets, and leap-year clamping in `dates.ts`.
+   - Levenshtein/token similarity diffing between contract revisions in `versions.ts`.
+   - Export compilation strictly constrained to approved items in `summaryCompiler.ts`.
+
+3. **Reserved Exclusively for Human Operators:**
+   - Confirming candidate extractions into legally binding commitments.
+   - Setting manual date overrides with mandatory audit justification.
+   - Selecting preferred interpretations for conflicting clauses.
+   - Re-verifying stale items flagged after a new contract version is uploaded.
 
 ---
 
-## 5. Human-in-the-Loop Review Touchpoints
+## 4. Agent Mistakes & Rejected Suggestions (Honest Log)
 
-The assistant adheres to a strict principle: **No AI output is considered final until reviewed and approved by a human operator.**
+During system development and automated verification, several agent mistakes and invalid patterns were identified, rejected, and corrected:
 
-### 1. Split-Screen Review Queue
-- The human reviewer inspects candidate items alongside the source document.
-- Clicking any citation jumps directly to and highlights the source clause.
-- The reviewer can:
-  - **Approve**: Confirms the item as accurate.
-  - **Reject**: Removes inaccurate or irrelevant extractions.
-  - **Edit**: Corrects dates, titles, descriptions, or party assignments.
-  - **Date Override**: Sets a custom deadline with a mandatory audit rationale.
-  - **Clarification Selection**: Chooses the intended interpretation for ambiguous clauses.
+### Mistake 1: Implicit Database Mutations Inside GET Request Handlers
+- **What happened:** Early implementations of `GET /api/contracts/:id` and `GET /api/dashboard` resolved dates and attempted to persist updated dates back to PostgreSQL during read requests.
+- **Why rejected:** Violates HTTP idempotent read semantics, caused database lock contention under concurrent dashboard polling, and broke test isolation.
+- **Resolution:** Removed all DB write operations from GET routes. Date resolution is strictly in-memory during reads, with persistence occurring only during extraction ingestion, new version creation, or explicit human edits.
+- <!-- TODO: Verify DB connection pool saturation under 500+ concurrent reviewer workloads -->
 
-### 2. Bulk Approval Safeguard
-- Reviewers cannot bulk-approve items with unverified citations (`citationVerified === false`) or low confidence scores (`confidenceScore < 0.80`).
-- These items are withheld from bulk actions, requiring explicit individual human inspection.
+### Mistake 2: Missing Date Source Attribution on Regex Fallbacks
+- **What happened:** When the LLM payload omitted an explicit ISO date, deterministic fallback regexes extracted dates directly from the cited clause text without distinguishing them from AI extractions.
+- **Why rejected:** Human reviewers could not determine whether a deadline came directly from the AI model or was inferred via regex from the quoted clause.
+- **Resolution:** Added `dateSource: "derived_from_quote"` attribute to the database schema and rendered a prominent Amber verification badge (`"Derived from clause text. Please verify."`) in both the Review queue and Dashboard.
+- <!-- TODO: Add heuristic warning if clause contains multiple competing dates in the same paragraph -->
 
-### 3. Version Diff & Stale Item Flagging
-- When a new version of a contract is uploaded (e.g. v2):
-  - Sections are aligned with the previous version.
-  - Extracted items are compared against the revised section text using token similarity.
-  - If the underlying text changed (similarity < 0.98), the item is flagged as `source_clause_changed`.
-  - If the section was removed, it is flagged as `clause_not_found`.
-  - The reviewer is required to re-verify or dismiss the affected items before summary compilation.
+### Mistake 3: Falsely Defaulting Missing `isAutoRenew` to `false`
+- **What happened:** `summaryCompiler.ts` coerced `null` or undefined `isAutoRenew` flags to `false`, generating summaries claiming auto-renewal was disabled when it was actually unspecified or unapproved.
+- **Why rejected:** Misleading legal interpretation that could cause teams to miss silent auto-renewals.
+- **Resolution:** Strictly typed `isAutoRenew: boolean | null`. If unconfirmed or absent, the compiler outputs: `"Renewal terms not specified in approved data. See cited clause."`.
+- <!-- TODO: Support multi-tiered renewal hierarchies (e.g., auto-renews unless budget cap exceeded) -->
 
-### 4. Approved-Only Output Boundary
-- The **Deadlines Dashboard** and **Reviewed Contract Summary** compile data **strictly** from approved items.
-- Unreviewed items are labeled as "Not yet reviewed" with zero operational commitments.
-- Rejected items are excluded from exports.
+### Mistake 4: Loose TypeScript `any` Types in API Route Handlers
+- **What happened:** Error catch blocks and multi-part upload handlers used `any` casts to bypass Fastify / Prisma typing restrictions.
+- **Why rejected:** Allowed silent runtime type regressions and prevented ESLint enforcement in CI.
+- **Resolution:** Replaced all `any` usages with typed interfaces and unknown guard checks. Integrated `@typescript-eslint` with zero-tolerance rules (`@typescript-eslint/no-explicit-any: "error"`).
+- <!-- TODO: Enforce strict-null-checks across legacy test fixtures -->
+
+### Mistake 5: Disruptive Modal `alert()` Dialogs
+- **What happened:** UI handlers in `ReviewPage.tsx` and `SummaryPage.tsx` utilized native browser `alert()` calls on error or success, freezing browser interaction and interfering with automated test drivers.
+- **Why rejected:** Degraded user experience and prevented non-blocking notifications.
+- **Resolution:** Replaced all `alert()` calls with an accessible, auto-dismissing `ToastContext` provider and animated toast notification system.
+- <!-- TODO: Implement undo action within toast notifications for accidental rejections -->
+
+---
+
+## 5. Output Verification & Auditing Procedures
+
+All outputs produced by the system undergo a multi-stage deterministic verification pipeline:
+
+1. **Exact-Match Verbatim Citation Verification:**
+   - Every candidate obligation or term must supply a verbatim `sourceQuote`.
+   - `citationVerifier.ts` standardizes Unicode whitespace and search-indexes the quote against the section text.
+   - If verified, exact `charStart` and `charEnd` offsets are recorded; if unverified, confidence is penalized, triggering mandatory individual human review.
+
+2. **Deterministic Banned-Advisory Filter:**
+   - Every generated text field is scanned against regex guardrails prohibiting unauthorized legal advice (`should renegotiate`, `legally invalid`, `we advise you to`).
+
+3. **Zod Schema Runtime Validation:**
+   - All extraction passes are validated against Zod schemas defined in `@contract-assistant/shared`. Any malformed model output fails immediately and triggers provider rollover.
+
+4. **Automated Test Suite Enforcement:**
+   - **102 Backend Tests:** Verifying date math, multi-provider fallback, citation verification, audit trails, and versioning.
+   - **15 Frontend Tests:** Verifying review queue workflows, stale item reconfirmation, toast notifications, and diff viewers.
+   - **Total 117 Tests Passing** with 0 failures across all workspaces.
+
+5. **Human-in-the-Loop Approved-Only Output Boundary:**
+   - Unapproved candidate items are never included in executive summaries or firm deadline alerts.
+   - Stale items from previous contract versions are quarantined until human re-confirmation.

@@ -308,7 +308,7 @@ Client shall pay monthly invoices within thirty (30) days.
   it("PATCH /api/contracts/:id/items/:itemId/stale-resolve - reconfirms or dismisses a stale item", async () => {
     const contractRes = await request(app.server).get(`/api/contracts/${contractId}`);
     const staleItem = contractRes.body.activeVersion.extractedItems.find(
-      (i: any) => i.reviewStatus === "stale"
+      (i: { reviewStatus: string }) => i.reviewStatus === "stale"
     );
 
     if (staleItem) {
@@ -324,7 +324,7 @@ Client shall pay monthly invoices within thirty (30) days.
 
       // Verify audit log entry
       const auditRes = await request(app.server).get(`/api/contracts/${contractId}/audit-log`);
-      const log = auditRes.body.logs.find((l: any) => l.action === "stale_reconfirmed");
+      const log = auditRes.body.logs.find((l: { action: string }) => l.action === "stale_reconfirmed");
       expect(log).toBeDefined();
     }
   });

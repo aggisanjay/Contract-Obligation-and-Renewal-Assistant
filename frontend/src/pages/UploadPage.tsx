@@ -223,10 +223,10 @@ export const UploadPage: React.FC = () => {
           navigate(`/contracts/${result.contractId}`);
         }, 800);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (stepTimerRef.current) clearInterval(stepTimerRef.current);
       setLoading(false);
-      setErrorMessage(err.message || "Failed to process and extract contract.");
+      setErrorMessage(err instanceof Error ? err.message : "Failed to process and extract contract.");
     }
   };
 
@@ -254,10 +254,12 @@ export const UploadPage: React.FC = () => {
           prev.map((s) => (s.id === stepId ? { ...s, status: "completed", error: undefined } : s))
         );
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setSteps((prev) =>
         prev.map((s) =>
-          s.id === stepId ? { ...s, status: "error", error: err?.message || "Failed to retry step." } : s
+          s.id === stepId
+            ? { ...s, status: "error", error: err instanceof Error ? err.message : "Failed to retry step." }
+            : s
         )
       );
     } finally {

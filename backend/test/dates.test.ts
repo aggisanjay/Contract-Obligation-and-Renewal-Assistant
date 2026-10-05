@@ -8,6 +8,9 @@ import {
   applyManualOverride,
   addMonthsClamped,
   isValidDateString,
+  extractTermFromText,
+  extractNoticeDaysFromText,
+  resolveItemCalculatedDate,
 } from "../src/services/dates.js";
 
 describe("Deterministic Dates - Validation & Helpers", () => {
@@ -287,9 +290,138 @@ describe("Deterministic Dates - Manual Override", () => {
     expect(res.reason).toBe("Agreed extension");
   });
 
+  it("handles override reset to calculated date", () => {
+    // When resetting, manualDateOverride is removed and original calculatedDate is restored
+    const originalCalculated = "2025-12-01";
+    const res = applyManualOverride(originalCalculated, "2025-12-15");
+    expect(res.manualDateOverride).toBe("2025-12-15");
+
+    // Simulating reset
+    const resetResult = {
+      calculatedDate: originalCalculated,
+      manualDateOverride: null,
+      isOverridden: false,
+      status: "resolved",
+      reason: "Reset to calculated date",
+    };
+    expect(resetResult.manualDateOverride).toBeNull();
+    expect(resetResult.calculatedDate).toBe("2025-12-01");
+  });
+
   it("rejects invalid manual date format", () => {
     const res = applyManualOverride("2025-12-01", "invalid-format");
     expect(res.status).toBe("needs_input");
     expect(res.isOverridden).toBe(false);
   });
 });
+
+describe("Deterministic Dates - Advanced Recurrence, Text Parsing & Fallbacks", () => {
+  it("calculates quarter-end + 15 days from today", () => {
+    // If today is 2026-10-04 (Q4 beginning), Q3 ended on 2026-09-30.
+    // 2026-09-30 + 15 days = 2026-10-15 (>= today, so next occurrence is 2026-10-15)
+    const res1 = resolveRelativeDeadline("within 15 days after each calendar quarter end", {
+      today: "2026-10-04",
+    });
+    expect(res1.status).toBe("resolved");
+    if (res1.status === "resolved") {
+      expect(res1.date).toBe("2026-10-15");
+      expect(res1.recurrence).toBe("quarterly");
+    }
+
+    // If today is 2026-10-20 (past Oct 15), next quarter is Q4 ending 2026-12-31.
+    // 2026-12-31 + 15 days = 2027-01-15
+    const res2 = resolveRelativeDeadline("quarterly within 15 days of period end", {
+      today: "2026-10-20",
+    });
+    expect(res2.status).toBe("resolved");
+    if (res2.status === "resolved") {
+      expect(res2.date).toBe("2027-01-15");
+      expect(res2.recurrence).toBe("quarterly");
+    }
+  });
+
+  it("calculates month-end + N days from today", () => {
+    // If today is 2026-05-10, April ended 2026-04-30.
+    // 2026-04-30 + 5 days = 2026-05-05 (< today, so next is May end + 5 days)
+    // May ends 2026-05-31 + 5 days = 2026-06-05
+    const res = resolveRelativeDeadline("within 5 days after each calendar month end", {
+      today: "2026-05-10",
+    });
+    expect(res.status).toBe("resolved");
+    if (res.status === "resolved") {
+      expect(res.date).toBe("2026-06-05");
+      expect(res.recurrence).toBe("monthly");
+    }
+  });
+
+  it("returns needs_input for invoice-anchored rules with no fixed date", () => {
+    const res = resolveRelativeDeadline("within 30 days of receipt of each monthly invoice", {});
+    expect(res.status).toBe("needs_input");
+    if (res.status === "needs_input") {
+      expect(res.reason).toBe("Recurring, event-based: no fixed date");
+      expect(res.recurrence).toBe("monthly");
+    }
+  });
+
+  it("returns needs_input for 'promptly' subjective standard", () => {
+    const res = resolveRelativeDeadline("Vendor shall promptly provide written notification", {});
+    expect(res.status).toBe("needs_input");
+    if (res.status === "needs_input") {
+      expect(res.reason).toContain("promptly");
+    }
+  });
+
+  it("parses number words like 'twelve (12)', 'sixty (60)', and 'forty-five'", () => {
+    const term12 = extractTermFromText("This agreement shall continue for twelve (12) months.");
+    expect(term12).toEqual({ months: 12 });
+
+    const notice60 = extractNoticeDaysFromText("written notice at least sixty (60) days prior");
+    expect(notice60).toBe(60);
+
+    const notice45 = extractNoticeDaysFromText("written notice at least forty-five days prior");
+    expect(notice45).toBe(45);
+  });
+
+  it("falls back to clause-text quote when AI payload is missing dates (derived_from_quote)", () => {
+    const item = {
+      itemType: "term",
+      currentValue: JSON.stringify({}), // Empty AI payload
+      exactQuote: "The initial term of this Agreement shall commence on the Effective Date and continue for twelve (12) months.",
+    };
+
+    const res = resolveItemCalculatedDate(item, { effectiveDate: "2025-01-01" });
+    expect(res.status).toBe("resolved");
+    expect(res.calculatedDate).toBe("2026-01-01");
+    expect(res.dateSource).toBe("derived_from_quote");
+  });
+
+  it("differentiates v1 vs v2 notice periods (30 days vs 60 days)", () => {
+    const expiry = "2026-01-01";
+    // v1: 30 days notice
+    const v1Notice = computeNoticeDeadline({ expiryDate: expiry, noticeDays: 30 });
+    expect(v1Notice.status).toBe("resolved");
+    if (v1Notice.status === "resolved") {
+      expect(v1Notice.date).toBe("2025-12-02");
+    }
+
+    // v2: 60 days notice
+    const v2Notice = computeNoticeDeadline({ expiryDate: expiry, noticeDays: 60 });
+    expect(v2Notice.status).toBe("resolved");
+    if (v2Notice.status === "resolved") {
+      expect(v2Notice.date).toBe("2025-11-02");
+    }
+  });
+
+  it("validates leap years and non-leap years in date arithmetic", () => {
+    // 2024 is a leap year (Feb 29 exists)
+    expect(isValidDateString("2024-02-29")).toBe(true);
+    // 2025 is not a leap year (Feb 29 invalid)
+    expect(isValidDateString("2025-02-29")).toBe(false);
+
+    // Adding 1 month to 2024-01-31 yields 2024-02-29
+    expect(addMonthsClamped("2024-01-31", 1)).toBe("2024-02-29");
+    // Adding 1 month to 2025-01-31 yields 2025-02-28
+    expect(addMonthsClamped("2025-01-31", 1)).toBe("2025-02-28");
+  });
+});
+

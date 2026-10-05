@@ -78,6 +78,7 @@ model ExtractedItem {
   manualDateOverride   String?         // YYYY-MM-DD
   dateResolutionStatus String          @default("not_applicable") // resolved | needs_input | not_applicable
   dateResolutionReason String?
+  dateSource           String?         // ai_payload | derived_from_quote | manual_override
 
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @updatedAt

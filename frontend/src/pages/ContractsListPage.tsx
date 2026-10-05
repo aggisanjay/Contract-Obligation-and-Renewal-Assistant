@@ -39,8 +39,8 @@ export const ContractsListPage: React.FC = () => {
       await deleteContract(contractToDelete.id);
       setContracts((prev) => prev.filter((c) => c.id !== contractToDelete.id));
       setContractToDelete(null);
-    } catch (err: any) {
-      setDeleteError(err?.message || "Failed to delete contract");
+    } catch (err: unknown) {
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete contract");
     } finally {
       setDeleting(false);
     }

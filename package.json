@@ -2,6 +2,7 @@
   "name": "contract-obligation-and-renewal-assistant",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "workspaces": [
     "shared",
     "backend",
@@ -11,12 +12,15 @@
     "dev:backend": "npm --workspace=backend run dev",
     "dev:frontend": "npm --workspace=frontend run dev",
     "build": "node scripts/build.mjs",
-    "start": "npx prisma db push --schema=backend/prisma/schema.prisma --accept-data-loss && node backend/dist/index.js",
-    "test": "node scripts/run-all.mjs \"npm --workspace=shared run test --if-present\" \"npm --workspace=backend run test\" \"npm --workspace=frontend run test --if-present\"",
-    "lint": "node scripts/lint.mjs",
+    "start": "npx --workspace=backend prisma migrate deploy && node backend/dist/index.js",
+    "test": "node ./node_modules/vitest/vitest.mjs run --root backend && node ./node_modules/vitest/vitest.mjs run --root frontend",
+    "lint": "eslint .",
     "typecheck": "node scripts/typecheck.mjs"
   },
   "devDependencies": {
-    "prettier": "^3.5.0"
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.12.0",
+    "prettier": "^3.5.0",
+    "typescript-eslint": "^8.71.0"
   }
 }

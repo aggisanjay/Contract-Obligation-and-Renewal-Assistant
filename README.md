@@ -4,6 +4,8 @@ An enterprise-grade information-management platform that ingests commercial cont
 
 The entire application can be deployed as **one single service** (Fastify serving the prebuilt React SPA with same-origin `/api` routing) or as independent frontend and backend services.
 
+🌐 **Live Application URL:** `https://contract-obligation-assistant.onrender.com` *(Live Demo Placeholder)*
+
 ---
 
 ## ⚠️ Important Legal Notice & System Positioning
@@ -15,6 +17,14 @@ The entire application can be deployed as **one single service** (Fastify servin
 > **It does NOT provide legal advice, opinion on legal enforceability, legal risk scoring, or recommendations to terminate or renegotiate.**
 >
 > All extracted items, computed deadlines, and source citations must be independently verified against original legal agreements by qualified professionals.
+
+### 🚫 Excluded Scope
+The system explicitly excludes the following capabilities:
+- **No Legal Counsel or Advice:** The platform does not evaluate clause fairness, enforceability under specific jurisdictions, or provide recommendations to accept, reject, or renegotiate contracts.
+- **No Autonomous Contracting:** The system never drafts revisions, modifies underlying legal documents, or executes contracts autonomously.
+- **No Direct Outbound Notice Transmission:** The platform tracks notification deadlines and alerts teams; it does not dispatch legal notices or emails directly to counterparties.
+- **No Bitmap OCR Ingestion:** Scanned image PDFs lacking embedded text layers are rejected with instructions to supply OCR-processed files.
+- **No E-Signature Workflow:** E-signature capturing and identity management (e.g., DocuSign, Adobe Sign) are excluded and delegated to dedicated signature systems.
 
 ---
 
@@ -118,13 +128,13 @@ The system includes a resilient **multi-provider LLM chain**:
 │   │   ├── llm/                    # Multi-provider client (Gemini, Groq, HF, Mock), guardrails, prompts
 │   │   ├── services/               # Ingestion (PDF coordinate reconstruction, DOCX), citations, dates, stale detection
 │   │   └── utils/                  # Structured Pino logger, AppError classes
-│   └── test/                       # 12 Vitest suites (88 passing unit & integration tests)
+│   └── test/                       # 13 Vitest suites (102 passing unit & integration tests)
 ├── frontend/                       # React 18 + TypeScript + Vite + Tailwind CSS
 │   ├── src/
 │   │   ├── components/             # Header, LegalDisclaimerBanner, Modals (UploadVersion, VersionDiff)
 │   │   ├── pages/                  # UploadPage (5-pass stepper), ReviewPage (stale queue), Dashboard, Summary
 │   │   ├── services/               # Type-safe API client (defaults to same-origin /api)
-│   │   └── test/                   # Vitest component suites (15 passing tests)
+│   │   └── test/                   # 6 Vitest component suites (15 passing tests)
 ├── samples/                        # Realistic sample contracts (.pdf, .docx, .txt) & policy documents
 │   ├── sample_contract_cloud_services.pdf
 │   ├── sample_contract_cloud_services_v2.pdf
@@ -132,8 +142,9 @@ The system includes a resilient **multi-provider LLM chain**:
 │   ├── sample_master_services_agreement_v2.docx
 │   ├── sample_contract_cloud_services.txt
 │   ├── sample_contract_cloud_services_v2.txt
+│   ├── demo_future_dates.txt
 │   └── sample_policy_document.txt
-├── .github/workflows/ci.yml        # GitHub Actions CI (Typecheck, Lint, Postgres, 103 Tests, Build)
+├── .github/workflows/ci.yml        # GitHub Actions CI (Typecheck, Lint, Postgres, 117 Tests, Build)
 ├── render.yaml                     # Render Blueprint for Single-Service Web Service deployment
 ├── railway.json                    # Railway deployment configuration
 ├── .gitignore                      # Clean Git ignore rules (zero secrets, node_modules, build artifacts)
@@ -319,13 +330,14 @@ A pre-configured `railway.json` is provided in the repository root:
 
 ## 🧪 Testing & Quality Assurance
 
-### Run All Automated Tests (103 Tests Passing)
+### Run All Automated Tests (117 Tests Passing)
 ```bash
-# Run 88 backend unit, API, and full lifecycle integration tests
-npm --workspace=backend run test
+# Run all 117 unit, integration, and UI component tests across all workspaces
+npm test
 
-# Run 15 frontend React Testing Library component tests
-npm --workspace=frontend run test
+# Or run workspace test suites individually:
+node ./node_modules/vitest/vitest.mjs run --root backend    # 13 suites, 102 backend tests
+node ./node_modules/vitest/vitest.mjs run --root frontend   # 6 suites, 15 frontend tests
 ```
 
 ### Full Lifecycle Integration Test

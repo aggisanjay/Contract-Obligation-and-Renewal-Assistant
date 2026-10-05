@@ -16,19 +16,35 @@ export interface PdfExtractionResult {
  * Rejects scanned / empty / password-protected / corrupt PDFs.
  */
 export async function extractTextFromPdf(buffer: Buffer): Promise<PdfExtractionResult> {
-  let pdfjsLib: any;
+  interface PDFLib {
+    getDocument: (params: {
+      data: Uint8Array;
+      useSystemFonts?: boolean;
+      disableFontFace?: boolean;
+    }) => {
+      promise: Promise<{
+        numPages: number;
+        getPage: (pageIndex: number) => Promise<{
+          getTextContent: () => Promise<{ items: unknown[] }>;
+        }>;
+      }>;
+    };
+  }
+  let pdfjsLib: PDFLib;
   try {
     // Dynamic import to support ESM/CJS interop cleanly
-    pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    pdfjsLib = (await import("pdfjs-dist/legacy/build/pdf.mjs")) as unknown as PDFLib;
   } catch {
-    pdfjsLib = await import("pdfjs-dist");
+    pdfjsLib = (await import("pdfjs-dist")) as unknown as PDFLib;
   }
 
   // Convert node Buffer to Uint8Array as required by pdfjs-dist
   const data = new Uint8Array(buffer);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let doc: { numPages: number; getPage: (pageIndex: number) => Promise<{ getTextContent: () => Promise<{ items: unknown[] }> }> };
+  let doc: {
+    numPages: number;
+    getPage: (pageIndex: number) => Promise<{ getTextContent: () => Promise<{ items: unknown[] }> }>;
+  };
   try {
     const loadingTask = pdfjsLib.getDocument({
       data,

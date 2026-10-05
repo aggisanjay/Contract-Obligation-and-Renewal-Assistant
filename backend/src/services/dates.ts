@@ -265,6 +265,63 @@ export function generateRecurringOccurrences(
  * Resolves a relative deadline rule into a concrete YYYY-MM-DD date.
  * e.g. "within 30 days of effective date", "end of initial term", "3 months before expiry".
  */
+/**
+ * Computes the next occurrence date for a calendar quarter-end deadline from `today`.
+ * Quarters end on Mar 31, Jun 30, Sep 30, Dec 31.
+ */
+export function computeNextQuarterEndDeadline(todayStr: string, daysAfter: number): string {
+  const today = parseDateString(todayStr);
+  const year = today.getUTCFullYear();
+
+  // Test current year and next year quarters
+  const candidateYears = [year, year + 1];
+  for (const y of candidateYears) {
+    const quarterEndDates = [
+      new Date(Date.UTC(y, 2, 31)),  // Mar 31
+      new Date(Date.UTC(y, 5, 30)),  // Jun 30
+      new Date(Date.UTC(y, 8, 30)),  // Sep 30
+      new Date(Date.UTC(y, 11, 31)), // Dec 31
+    ];
+
+    for (const qEnd of quarterEndDates) {
+      const deadline = addDays(qEnd, daysAfter);
+      if (!isBefore(deadline, today)) {
+        return toDateString(deadline);
+      }
+    }
+  }
+
+  // Fallback to Q1 next year + daysAfter
+  return toDateString(addDays(new Date(Date.UTC(year + 1, 2, 31)), daysAfter));
+}
+
+/**
+ * Computes the next occurrence date for a calendar month-end deadline from `today`.
+ */
+export function computeNextMonthEndDeadline(todayStr: string, daysAfter: number): string {
+  const today = parseDateString(todayStr);
+  const year = today.getUTCFullYear();
+  const month = today.getUTCMonth();
+
+  // Test current month and following months
+  for (let offset = 0; offset <= 12; offset++) {
+    const d = new Date(Date.UTC(year, month + offset, 1));
+    const mEnd = endOfMonth(d);
+    const deadline = addDays(mEnd, daysAfter);
+    if (!isBefore(deadline, today)) {
+      return toDateString(deadline);
+    }
+  }
+
+  const fallbackDate = endOfMonth(today);
+  return toDateString(addDays(fallbackDate, daysAfter));
+}
+
+/**
+ * Resolves a relative deadline rule into a concrete YYYY-MM-DD date.
+ * e.g. "within 30 days of effective date", "end of initial term", "3 months before expiry",
+ * "within 15 days after each calendar quarter end".
+ */
 export function resolveRelativeDeadline(
   textRule: string,
   context: {
@@ -273,70 +330,134 @@ export function resolveRelativeDeadline(
     invoiceReceiptDate?: string | null;
     today?: string;
   }
-): DateResolutionResult {
+): DateResolutionResult & { recurrence?: string | null } {
   const normalized = textRule.toLowerCase().trim();
+  const todayStr = context.today || format(new Date(), "yyyy-MM-dd");
+
+  // Pattern: "promptly" -> subjective standard, needs input
+  if (/\bpromptly\b/i.test(normalized)) {
+    return {
+      status: "needs_input",
+      reason: "Subjective standard ('promptly'): no fixed date",
+    };
+  }
+
+  // Pattern: event-anchored with no fixed date (e.g. "receipt of each monthly invoice", "upon receipt of invoice")
+  if (/(?:receipt|issuance)\s+of\s+(?:each\s+)?(?:monthly\s+)?invoice/i.test(normalized)) {
+    return {
+      status: "needs_input",
+      reason: "Recurring, event-based: no fixed date",
+      recurrence: "monthly",
+    };
+  }
+
+  // Pattern: "within N days after each calendar quarter end" / "quarterly within N days of period end"
+  // e.g. "15 days after each calendar quarter", "within 15 days after each calendar quarter end", "quarterly within 15 days of period end"
+  const quarterEndMatch =
+    normalized.match(/(?:within\s+)?([a-z0-9-]+(?:\s*\(\d+\))?)\s+days?\s+(?:after|following|of)\s+(?:each\s+)?calendar\s+quarter(?:\s*end)?/i) ||
+    normalized.match(/(?:quarterly\s+)?(?:within\s+)?([a-z0-9-]+(?:\s*\(\d+\))?)\s+days?\s+(?:after|following|of)\s+(?:each\s+)?(?:period\s+end|quarter\s+end)/i) ||
+    normalized.match(/due\s+([a-z0-9-]+(?:\s*\(\d+\))?)\s+days?\s+after\s+each\s+calendar\s+quarter/i);
+
+  if (quarterEndMatch && quarterEndMatch[1]) {
+    const days = parseNumberFromText(quarterEndMatch[1]) ?? parseInt(quarterEndMatch[1], 10);
+    if (!isNaN(days)) {
+      const resolved = computeNextQuarterEndDeadline(todayStr, days);
+      return {
+        status: "resolved",
+        date: resolved,
+        sourceRule: `${days} days after calendar quarter end (next occurrence from ${todayStr})`,
+        reminders: generateReminders(resolved, { today: todayStr }),
+        recurrence: "quarterly",
+      };
+    }
+  }
+
+  // Pattern: "within N days after each month end" / "monthly within N days of period end"
+  const monthEndMatch =
+    normalized.match(/(?:within\s+)?([a-z0-9-]+(?:\s*\(\d+\))?)\s+days?\s+(?:after|following|of)\s+(?:each\s+)?(?:calendar\s+)?month(?:\s*end)?/i) ||
+    normalized.match(/(?:monthly\s+)?(?:within\s+)?([a-z0-9-]+(?:\s*\(\d+\))?)\s+days?\s+(?:after|following|of)\s+(?:each\s+)?(?:period\s+end|month\s+end)/i);
+
+  if (monthEndMatch && monthEndMatch[1]) {
+    const days = parseNumberFromText(monthEndMatch[1]) ?? parseInt(monthEndMatch[1], 10);
+    if (!isNaN(days)) {
+      const resolved = computeNextMonthEndDeadline(todayStr, days);
+      return {
+        status: "resolved",
+        date: resolved,
+        sourceRule: `${days} days after month end (next occurrence from ${todayStr})`,
+        reminders: generateReminders(resolved, { today: todayStr }),
+        recurrence: "monthly",
+      };
+    }
+  }
 
   // Pattern: "within X days of effective date" / "X days after effective date"
   const daysAfterEffective = normalized.match(
-    /(?:within\s+)?(\d+)\s+days?\s+(?:after|from|following|of)\s+(?:the\s+)?effective\s+date/
+    /(?:within\s+)?([a-z0-9-]+(?:\s*\(\d+\))?)\s+days?\s+(?:after|from|following|of)\s+(?:the\s+)?effective\s+date/i
   );
-  if (daysAfterEffective) {
-    const days = parseInt(daysAfterEffective[1] || "0", 10);
-    if (!context.effectiveDate || !isValidDateString(context.effectiveDate)) {
+  if (daysAfterEffective && daysAfterEffective[1]) {
+    const days = parseNumberFromText(daysAfterEffective[1]) ?? parseInt(daysAfterEffective[1], 10);
+    if (!isNaN(days)) {
+      if (!context.effectiveDate || !isValidDateString(context.effectiveDate)) {
+        return {
+          status: "needs_input",
+          reason: "Effective Date is required to resolve this deadline.",
+        };
+      }
+      const resolved = toDateString(addDays(parseDateString(context.effectiveDate), days));
       return {
-        status: "needs_input",
-        reason: "Effective Date is required to resolve this deadline.",
+        status: "resolved",
+        date: resolved,
+        sourceRule: `${days} days after Effective Date (${context.effectiveDate})`,
+        reminders: generateReminders(resolved, { today: context.today }),
       };
     }
-    const resolved = toDateString(addDays(parseDateString(context.effectiveDate), days));
-    return {
-      status: "resolved",
-      date: resolved,
-      sourceRule: `${days} days after Effective Date (${context.effectiveDate})`,
-      reminders: generateReminders(resolved, { today: context.today }),
-    };
   }
 
   // Pattern: "X months before expiry" / "X days prior to expiry"
   const daysBeforeExpiry = normalized.match(
-    /(\d+)\s+days?\s+(?:before|prior\s+to|in\s+advance\s+of)\s+(?:the\s+)?(?:expiry|expiration|end\s+of\s+term)/
+    /([a-z0-9-]+(?:\s*\(\d+\))?)\s+days?\s+(?:before|prior\s+to|in\s+advance\s+of)\s+(?:the\s+)?(?:expiry|expiration|end\s+of\s+term)/i
   );
-  if (daysBeforeExpiry) {
-    const days = parseInt(daysBeforeExpiry[1] || "0", 10);
-    if (!context.expiryDate || !isValidDateString(context.expiryDate)) {
+  if (daysBeforeExpiry && daysBeforeExpiry[1]) {
+    const days = parseNumberFromText(daysBeforeExpiry[1]) ?? parseInt(daysBeforeExpiry[1], 10);
+    if (!isNaN(days)) {
+      if (!context.expiryDate || !isValidDateString(context.expiryDate)) {
+        return {
+          status: "needs_input",
+          reason: "Expiry Date is required to resolve this deadline.",
+        };
+      }
+      const resolved = toDateString(subDays(parseDateString(context.expiryDate), days));
       return {
-        status: "needs_input",
-        reason: "Expiry Date is required to resolve this deadline.",
+        status: "resolved",
+        date: resolved,
+        sourceRule: `${days} days prior to Expiry (${context.expiryDate})`,
+        reminders: generateReminders(resolved, { today: context.today }),
       };
     }
-    const resolved = toDateString(subDays(parseDateString(context.expiryDate), days));
-    return {
-      status: "resolved",
-      date: resolved,
-      sourceRule: `${days} days prior to Expiry (${context.expiryDate})`,
-      reminders: generateReminders(resolved, { today: context.today }),
-    };
   }
 
   // Pattern: "X months after effective date"
   const monthsAfterEffective = normalized.match(
-    /(\d+)\s+months?\s+(?:after|following|from)\s+(?:the\s+)?effective\s+date/
+    /([a-z0-9-]+(?:\s*\(\d+\))?)\s+months?\s+(?:after|following|from)\s+(?:the\s+)?effective\s+date/i
   );
-  if (monthsAfterEffective) {
-    const months = parseInt(monthsAfterEffective[1] || "0", 10);
-    if (!context.effectiveDate || !isValidDateString(context.effectiveDate)) {
+  if (monthsAfterEffective && monthsAfterEffective[1]) {
+    const months = parseNumberFromText(monthsAfterEffective[1]) ?? parseInt(monthsAfterEffective[1], 10);
+    if (!isNaN(months)) {
+      if (!context.effectiveDate || !isValidDateString(context.effectiveDate)) {
+        return {
+          status: "needs_input",
+          reason: "Effective Date is required to resolve this deadline.",
+        };
+      }
+      const resolved = addMonthsClamped(context.effectiveDate, months);
       return {
-        status: "needs_input",
-        reason: "Effective Date is required to resolve this deadline.",
+        status: "resolved",
+        date: resolved,
+        sourceRule: `${months} months after Effective Date (${context.effectiveDate})`,
+        reminders: generateReminders(resolved, { today: context.today }),
       };
     }
-    const resolved = addMonthsClamped(context.effectiveDate, months);
-    return {
-      status: "resolved",
-      date: resolved,
-      sourceRule: `${months} months after Effective Date (${context.effectiveDate})`,
-      reminders: generateReminders(resolved, { today: context.today }),
-    };
   }
 
   // Pattern: "end of initial term"
@@ -411,6 +532,10 @@ export function parseNumberFromText(text: string): number | null {
   if (digitMatch && digitMatch[1]) {
     return parseInt(digitMatch[1], 10);
   }
+  const clean = text.toLowerCase().trim();
+  if (WORD_TO_NUMBER[clean] !== undefined) {
+    return WORD_TO_NUMBER[clean];
+  }
   for (const [word, num] of Object.entries(WORD_TO_NUMBER)) {
     const rx = new RegExp(`\\b${word}\\b`, "i");
     if (rx.test(text)) {
@@ -458,24 +583,31 @@ export interface ResolvableItem {
   exactQuote?: string | null;
   calculatedDate?: string | null;
   manualDateOverride?: string | null;
+  dateSource?: string | null;
+}
+
+export interface ResolveItemDateResult {
+  calculatedDate: string | null;
+  status: "resolved" | "needs_input" | "not_applicable";
+  reason?: string;
+  dateSource?: "ai_payload" | "derived_from_quote" | "manual_override" | null;
+  recurrence?: string | null;
 }
 
 /**
  * Deterministically resolves the target operational or compliance date for an extracted contract item.
+ * Tracks dateSource as "ai_payload", "derived_from_quote", or "manual_override".
  */
 export function resolveItemCalculatedDate(
   item: ResolvableItem,
-  context: { effectiveDate?: string | null; expiryDate?: string | null }
-): {
-  calculatedDate: string | null;
-  status: "resolved" | "needs_input" | "not_applicable";
-  reason?: string;
-} {
+  context: { effectiveDate?: string | null; expiryDate?: string | null; today?: string }
+): ResolveItemDateResult {
   if (item.manualDateOverride && isValidDateString(item.manualDateOverride)) {
-    return { calculatedDate: item.manualDateOverride, status: "resolved" };
-  }
-  if (item.calculatedDate && isValidDateString(item.calculatedDate)) {
-    return { calculatedDate: item.calculatedDate, status: "resolved" };
+    return {
+      calculatedDate: item.manualDateOverride,
+      status: "resolved",
+      dateSource: "manual_override",
+    };
   }
 
   let payload: Record<string, unknown> = {};
@@ -495,12 +627,12 @@ export function resolveItemCalculatedDate(
   if (item.itemType === "effective_date") {
     const dateVal = typeof payload.date === "string" ? payload.date : null;
     if (dateVal && isValidDateString(dateVal)) {
-      return { calculatedDate: dateVal, status: "resolved" };
+      return { calculatedDate: dateVal, status: "resolved", dateSource: "ai_payload" };
     }
     // Try YYYY-MM-DD in quote
     const isoMatch = quote.match(/\b(\d{4}-\d{2}-\d{2})\b/);
     if (isoMatch && isoMatch[1] && isValidDateString(isoMatch[1])) {
-      return { calculatedDate: isoMatch[1], status: "resolved" };
+      return { calculatedDate: isoMatch[1], status: "resolved", dateSource: "derived_from_quote" };
     }
     return { status: "needs_input", calculatedDate: null, reason: "Effective date could not be parsed." };
   }
@@ -509,7 +641,7 @@ export function resolveItemCalculatedDate(
   if (item.itemType === "expiry" || item.itemType === "term") {
     const exactExpiry = typeof payload.expiryDate === "string" && isValidDateString(payload.expiryDate) ? payload.expiryDate : null;
     if (exactExpiry) {
-      return { calculatedDate: exactExpiry, status: "resolved" };
+      return { calculatedDate: exactExpiry, status: "resolved", dateSource: "ai_payload" };
     }
 
     const effDate = context.effectiveDate;
@@ -530,11 +662,11 @@ export function resolveItemCalculatedDate(
     if (termMonths || termYears) {
       const expRes = computeExpiryDate({ effectiveDate: effDate, termMonths, termYears });
       if (expRes.status === "resolved") {
-        return { calculatedDate: expRes.date, status: "resolved" };
+        return { calculatedDate: expRes.date, status: "resolved", dateSource: "ai_payload" };
       }
     }
 
-    // Try text quote extraction
+    // Try text quote extraction (derived from quote)
     const extracted = extractTermFromText(quote);
     if (extracted && (extracted.months || extracted.years)) {
       const expRes = computeExpiryDate({
@@ -543,7 +675,7 @@ export function resolveItemCalculatedDate(
         termYears: extracted.years,
       });
       if (expRes.status === "resolved") {
-        return { calculatedDate: expRes.date, status: "resolved" };
+        return { calculatedDate: expRes.date, status: "resolved", dateSource: "derived_from_quote" };
       }
     }
 
@@ -567,16 +699,16 @@ export function resolveItemCalculatedDate(
     if (noticeDays || noticeMonths) {
       const notRes = computeNoticeDeadline({ expiryDate: expDate, noticeDays, noticeMonths });
       if (notRes.status === "resolved") {
-        return { calculatedDate: notRes.date, status: "resolved" };
+        return { calculatedDate: notRes.date, status: "resolved", dateSource: "ai_payload" };
       }
     }
 
-    // Try text quote extraction
+    // Try text quote extraction (derived from quote)
     const extractedDays = extractNoticeDaysFromText(quote);
     if (extractedDays && extractedDays > 0) {
       const notRes = computeNoticeDeadline({ expiryDate: expDate, noticeDays: extractedDays });
       if (notRes.status === "resolved") {
-        return { calculatedDate: notRes.date, status: "resolved" };
+        return { calculatedDate: notRes.date, status: "resolved", dateSource: "derived_from_quote" };
       }
     }
 
@@ -585,9 +717,10 @@ export function resolveItemCalculatedDate(
 
   // 4. Obligations
   if (item.itemType === "obligation") {
+    const recurrence = typeof payload.recurrence === "string" ? payload.recurrence : null;
     const explicitDeadline = typeof payload.deadlineDate === "string" && isValidDateString(payload.deadlineDate) ? payload.deadlineDate : null;
     if (explicitDeadline) {
-      return { calculatedDate: explicitDeadline, status: "resolved" };
+      return { calculatedDate: explicitDeadline, status: "resolved", dateSource: "ai_payload", recurrence };
     }
 
     const relDeadline = typeof payload.relativeDeadline === "string" ? payload.relativeDeadline : null;
@@ -595,24 +728,52 @@ export function resolveItemCalculatedDate(
       const relRes = resolveRelativeDeadline(relDeadline, {
         effectiveDate: context.effectiveDate,
         expiryDate: context.expiryDate,
+        today: context.today,
       });
       if (relRes.status === "resolved") {
-        return { calculatedDate: relRes.date, status: "resolved" };
+        return {
+          calculatedDate: relRes.date,
+          status: "resolved",
+          dateSource: "ai_payload",
+          recurrence: relRes.recurrence || recurrence,
+        };
+      } else if (relRes.status === "needs_input") {
+        return {
+          status: "needs_input",
+          calculatedDate: null,
+          reason: relRes.reason,
+          dateSource: "ai_payload",
+          recurrence: relRes.recurrence || recurrence,
+        };
       }
     }
 
-    // Try quote text for relative deadline
+    // Try quote text for relative deadline (derived from quote)
     if (quote) {
       const relRes = resolveRelativeDeadline(quote, {
         effectiveDate: context.effectiveDate,
         expiryDate: context.expiryDate,
+        today: context.today,
       });
       if (relRes.status === "resolved") {
-        return { calculatedDate: relRes.date, status: "resolved" };
+        return {
+          calculatedDate: relRes.date,
+          status: "resolved",
+          dateSource: "derived_from_quote",
+          recurrence: relRes.recurrence || recurrence,
+        };
+      } else if (relRes.status === "needs_input") {
+        return {
+          status: "needs_input",
+          calculatedDate: null,
+          reason: relRes.reason,
+          dateSource: "derived_from_quote",
+          recurrence: relRes.recurrence || recurrence,
+        };
       }
     }
 
-    return { status: "needs_input", calculatedDate: null, reason: "No concrete or relative deadline specified." };
+    return { status: "needs_input", calculatedDate: null, reason: "No concrete or relative deadline specified.", recurrence };
   }
 
   return { status: "not_applicable", calculatedDate: null };

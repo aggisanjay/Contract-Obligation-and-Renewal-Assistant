@@ -48,8 +48,8 @@ export const VersionDiffModal: React.FC<VersionDiffModalProps> = ({
       setError(null);
       const res = await compareVersions(contractId, baseV, targetV);
       setDiffData(res);
-    } catch (err: any) {
-      setError(err?.message || "Failed to compare versions");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to compare versions");
     } finally {
       setLoading(false);
     }

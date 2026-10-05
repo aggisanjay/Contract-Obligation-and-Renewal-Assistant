@@ -1,22 +1,8 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../../models/prisma.js";
 import { format, parseISO, differenceInDays } from "date-fns";
-import { resolveItemCalculatedDate } from "../../services/dates.js";
-
-export interface DashboardDeadlineItem {
-  id: string;
-  contractId: string;
-  contractTitle: string;
-  itemType: string;
-  title: string;
-  deadlineDate: string; // YYYY-MM-DD
-  responsibleParty?: string | null;
-  urgency: "overdue" | "due_soon" | "upcoming";
-  daysRemaining: number;
-  reviewStatus: string;
-  sourceSectionLabel: string;
-  recurrence?: string | null;
-}
+import { resolveItemCalculatedDate, isValidDateString } from "../../services/dates.js";
+import { DashboardDeadlineItem } from "@contract-assistant/shared";
 
 export async function dashboardRoutes(app: FastifyInstance) {
   app.get("/api/dashboard", async (req: FastifyRequest, reply: FastifyReply) => {
@@ -49,23 +35,22 @@ export async function dashboardRoutes(app: FastifyInstance) {
 
     const firmDeadlines: DashboardDeadlineItem[] = [];
     const notYetReviewed: DashboardDeadlineItem[] = [];
+    const needsDate: DashboardDeadlineItem[] = [];
+    const needsReconfirmation: DashboardDeadlineItem[] = [];
 
     for (const contract of contracts) {
       const activeVer = contract.versions[0];
       if (!activeVer) continue;
 
-      // Deterministically find effective date and expiry date for this version
+      // Deterministically find effective date and expiry date for this version in-memory
       let effDate: string | null = null;
       const effItem = activeVer.extractedItems.find((i) => i.itemType === "effective_date");
       if (effItem) {
-        const res = resolveItemCalculatedDate(effItem, {});
-        if (res.calculatedDate) {
-          effDate = res.calculatedDate;
-          if (!effItem.calculatedDate) {
-            await prisma.extractedItem.update({
-              where: { id: effItem.id },
-              data: { calculatedDate: effDate, dateResolutionStatus: "resolved" },
-            }).catch(() => {});
+        effDate = effItem.manualDateOverride || effItem.calculatedDate || null;
+        if (!effDate) {
+          const res = resolveItemCalculatedDate(effItem, {});
+          if (res.calculatedDate) {
+            effDate = res.calculatedDate;
           }
         }
       }
@@ -73,31 +58,33 @@ export async function dashboardRoutes(app: FastifyInstance) {
       let expDate: string | null = null;
       const expItem = activeVer.extractedItems.find((i) => i.itemType === "expiry" || i.itemType === "term");
       if (expItem) {
-        const res = resolveItemCalculatedDate(expItem, { effectiveDate: effDate });
-        if (res.calculatedDate) {
-          expDate = res.calculatedDate;
-          if (!expItem.calculatedDate) {
-            await prisma.extractedItem.update({
-              where: { id: expItem.id },
-              data: { calculatedDate: expDate, dateResolutionStatus: "resolved" },
-            }).catch(() => {});
+        expDate = expItem.manualDateOverride || expItem.calculatedDate || null;
+        if (!expDate) {
+          const res = resolveItemCalculatedDate(expItem, { effectiveDate: effDate });
+          if (res.calculatedDate) {
+            expDate = res.calculatedDate;
           }
         }
       }
 
       for (const item of activeVer.extractedItems) {
         let targetDate = item.manualDateOverride || item.calculatedDate;
+        let dateSource = item.dateSource;
+        let dateResolutionStatus = item.dateResolutionStatus;
+        let dateResolutionReason = item.dateResolutionReason;
+
         if (!targetDate) {
           const res = resolveItemCalculatedDate(item, { effectiveDate: effDate, expiryDate: expDate });
           if (res.calculatedDate) {
             targetDate = res.calculatedDate;
-            await prisma.extractedItem.update({
-              where: { id: item.id },
-              data: { calculatedDate: targetDate, dateResolutionStatus: res.status },
-            }).catch(() => {});
+            dateResolutionStatus = res.status;
+            dateResolutionReason = res.reason || null;
+            if (res.dateSource) dateSource = res.dateSource;
+          } else {
+            dateResolutionStatus = res.status;
+            dateResolutionReason = res.reason || null;
           }
         }
-        if (!targetDate) continue;
 
         let payload: Record<string, unknown> = {};
         try {
@@ -124,14 +111,16 @@ export async function dashboardRoutes(app: FastifyInstance) {
           itemTitle = `Effective Date`;
         }
 
-        const dateObj = parseISO(targetDate);
-        const daysDiff = differenceInDays(dateObj, todayDate);
-
+        let daysDiff = 0;
         let urgency: "overdue" | "due_soon" | "upcoming" = "upcoming";
-        if (daysDiff < 0) {
-          urgency = "overdue";
-        } else if (daysDiff <= 14) {
-          urgency = "due_soon";
+        if (targetDate && isValidDateString(targetDate)) {
+          const dateObj = parseISO(targetDate);
+          daysDiff = differenceInDays(dateObj, todayDate);
+          if (daysDiff < 0) {
+            urgency = "overdue";
+          } else if (daysDiff <= 14) {
+            urgency = "due_soon";
+          }
         }
 
         const party = typeof payload.responsibleParty === "string" ? payload.responsibleParty : null;
@@ -159,12 +148,24 @@ export async function dashboardRoutes(app: FastifyInstance) {
           reviewStatus: item.reviewStatus,
           sourceSectionLabel: item.sourceSectionLabel,
           recurrence,
+          dateSource,
+          dateResolutionStatus,
+          dateResolutionReason,
         };
 
-        // RULE: Only APPROVED items appear as firm deadlines.
-        // Pending/uncertain ones appear in a separate section labelled "Not yet reviewed".
-        if (item.reviewStatus === "approved" || item.reviewStatus === "edited_approved") {
-          firmDeadlines.push(deadlineItem);
+        // RULE:
+        // 1. Stale items go to needsReconfirmation - NEVER in firm deadlines.
+        // 2. Approved obligations with needs_input or missing dates go to needsDate - not hidden!
+        // 3. Approved items with concrete dates go to firmDeadlines.
+        // 4. Pending items go to notYetReviewed.
+        if (item.reviewStatus === "stale") {
+          needsReconfirmation.push(deadlineItem);
+        } else if (item.reviewStatus === "approved" || item.reviewStatus === "edited_approved") {
+          if (targetDate && dateResolutionStatus !== "needs_input") {
+            firmDeadlines.push(deadlineItem);
+          } else {
+            needsDate.push(deadlineItem);
+          }
         } else {
           notYetReviewed.push(deadlineItem);
         }
@@ -186,8 +187,10 @@ export async function dashboardRoutes(app: FastifyInstance) {
     }
 
     // Sort by deadline date ascending
-    filteredFirm.sort((a, b) => a.deadlineDate.localeCompare(b.deadlineDate));
-    notYetReviewed.sort((a, b) => a.deadlineDate.localeCompare(b.deadlineDate));
+    filteredFirm.sort((a, b) => (a.deadlineDate || "").localeCompare(b.deadlineDate || ""));
+    notYetReviewed.sort((a, b) => (a.deadlineDate || "").localeCompare(b.deadlineDate || ""));
+    needsDate.sort((a, b) => a.title.localeCompare(b.title));
+    needsReconfirmation.sort((a, b) => a.title.localeCompare(b.title));
 
     return reply.send({
       today: todayStr,
@@ -196,9 +199,13 @@ export async function dashboardRoutes(app: FastifyInstance) {
         overdueCount: firmDeadlines.filter((d) => d.urgency === "overdue").length,
         dueSoonCount: firmDeadlines.filter((d) => d.urgency === "due_soon").length,
         notYetReviewedCount: notYetReviewed.length,
+        needsDateCount: needsDate.length,
+        needsReconfirmationCount: needsReconfirmation.length,
       },
       firmDeadlines: filteredFirm,
       notYetReviewed,
+      needsDate,
+      needsReconfirmation,
     });
   });
 }

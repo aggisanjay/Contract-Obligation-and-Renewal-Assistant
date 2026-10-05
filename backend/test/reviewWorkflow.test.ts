@@ -2,12 +2,10 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import { buildServer } from "../src/api/server.js";
 import { FastifyInstance } from "fastify";
-import { prisma } from "../src/models/prisma.js";
 
 describe("Review Workflow API & Audit Log", () => {
   let app: FastifyInstance;
   let contractId: string;
-  let versionId: string;
 
   beforeAll(async () => {
     app = await buildServer();
@@ -53,7 +51,6 @@ Vendor will use commercially reasonable efforts to resolve support tickets promp
     expect(res.body.itemCount).toBeGreaterThanOrEqual(5);
 
     contractId = res.body.contractId;
-    versionId = res.body.versionId;
   });
 
   it("GET /api/contracts/:id - retrieves full review payload with sections and items", async () => {
@@ -68,7 +65,7 @@ Vendor will use commercially reasonable efforts to resolve support tickets promp
   it("PATCH /api/contracts/:id/items/:itemId - approves an item and logs audit", async () => {
     const contractRes = await request(app.server).get(`/api/contracts/${contractId}`);
     const partyItem = contractRes.body.activeVersion.extractedItems.find(
-      (i: any) => i.itemType === "party"
+      (i: { itemType: string }) => i.itemType === "party"
     );
     expect(partyItem).toBeDefined();
 
@@ -82,7 +79,7 @@ Vendor will use commercially reasonable efforts to resolve support tickets promp
     // Verify Audit Log
     const auditRes = await request(app.server).get(`/api/contracts/${contractId}/audit-log`);
     expect(auditRes.status).toBe(200);
-    const log = auditRes.body.logs.find((l: any) => l.itemId === partyItem.id);
+    const log = auditRes.body.logs.find((l: { itemId: string }) => l.itemId === partyItem.id);
     expect(log).toBeDefined();
     expect(log.action).toBe("item_approved");
     expect(log.actor).toBe("local user");
@@ -91,7 +88,7 @@ Vendor will use commercially reasonable efforts to resolve support tickets promp
   it("PATCH /api/contracts/:id/items/:itemId - edits an item and records old and new values", async () => {
     const contractRes = await request(app.server).get(`/api/contracts/${contractId}`);
     const paymentItem = contractRes.body.activeVersion.extractedItems.find(
-      (i: any) => i.itemType === "obligation"
+      (i: { itemType: string }) => i.itemType === "obligation"
     );
     expect(paymentItem).toBeDefined();
 
@@ -115,7 +112,7 @@ Vendor will use commercially reasonable efforts to resolve support tickets promp
 
     // Verify Audit Log preserved old and new value
     const auditRes = await request(app.server).get(`/api/contracts/${contractId}/audit-log`);
-    const log = auditRes.body.logs.find((l: any) => l.itemId === paymentItem.id && l.action === "item_edited");
+    const log = auditRes.body.logs.find((l: { itemId: string; action: string }) => l.itemId === paymentItem.id && l.action === "item_edited");
     expect(log).toBeDefined();
     expect(log.oldValue).toBeDefined();
     expect(log.newValue).toContain("45 days");
@@ -124,7 +121,7 @@ Vendor will use commercially reasonable efforts to resolve support tickets promp
   it("PATCH /api/contracts/:id/items/:itemId - applies manual date override", async () => {
     const contractRes = await request(app.server).get(`/api/contracts/${contractId}`);
     const expiryItem = contractRes.body.activeVersion.extractedItems.find(
-      (i: any) => i.itemType === "expiry"
+      (i: { itemType: string }) => i.itemType === "expiry"
     );
     expect(expiryItem).toBeDefined();
 
@@ -144,7 +141,7 @@ Vendor will use commercially reasonable efforts to resolve support tickets promp
   it("POST /api/contracts/:id/items/bulk-approve - bulk approves confirmed items but never uncertain ones", async () => {
     const contractRes = await request(app.server).get(`/api/contracts/${contractId}`);
     const allItems = contractRes.body.activeVersion.extractedItems;
-    const itemIds = allItems.map((i: any) => i.id);
+    const itemIds = allItems.map((i: { id: string }) => i.id);
 
     const bulkRes = await request(app.server)
       .post(`/api/contracts/${contractId}/items/bulk-approve`)
@@ -154,7 +151,7 @@ Vendor will use commercially reasonable efforts to resolve support tickets promp
     expect(bulkRes.body.approvedCount).toBeGreaterThanOrEqual(1);
 
     // Uncertain items (like ambiguity) should have been skipped!
-    const ambiguity = allItems.find((i: any) => i.itemType === "ambiguity");
+    const ambiguity = allItems.find((i: { itemType: string }) => i.itemType === "ambiguity");
     if (ambiguity) {
       expect(bulkRes.body.skippedItemIds).toContain(ambiguity.id);
     }

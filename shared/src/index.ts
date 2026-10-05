@@ -376,6 +376,7 @@ export const ExtractedItemSchema = z.object({
   manualDateOverride: z.string().nullable().optional(), // YYYY-MM-DD
   dateResolutionStatus: z.enum(["resolved", "needs_input", "not_applicable"]).default("not_applicable"),
   dateResolutionReason: z.string().nullable().optional(),
+  dateSource: z.string().nullable().optional(),
 
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -539,7 +540,7 @@ export interface CompiledSummaryData {
     citation: string;
   };
   renewalTerms: {
-    isAutoRenew: boolean;
+    isAutoRenew: boolean | null;
     summary: string;
     citation: string;
   };
@@ -564,13 +565,16 @@ export interface DashboardDeadlineItem {
   contractTitle: string;
   itemType: string;
   title: string;
-  deadlineDate: string; // YYYY-MM-DD
+  deadlineDate: string | null; // YYYY-MM-DD or null
   responsibleParty?: string | null;
   urgency: "overdue" | "due_soon" | "upcoming";
   daysRemaining: number;
   reviewStatus: string;
   sourceSectionLabel: string;
   recurrence?: string | null;
+  dateSource?: string | null; // "ai_payload" | "derived_from_quote" | "manual_override"
+  dateResolutionStatus?: string | null;
+  dateResolutionReason?: string | null;
 }
 
 export interface DashboardData {
@@ -580,9 +584,13 @@ export interface DashboardData {
     overdueCount: number;
     dueSoonCount: number;
     notYetReviewedCount: number;
+    needsDateCount?: number;
+    needsReconfirmationCount?: number;
   };
   firmDeadlines: DashboardDeadlineItem[];
   notYetReviewed: DashboardDeadlineItem[];
+  needsDate?: DashboardDeadlineItem[];
+  needsReconfirmation?: DashboardDeadlineItem[];
 }
 
 // ==========================================

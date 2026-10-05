@@ -14,14 +14,14 @@ export interface ParsedSectionInput {
 // Regex patterns to identify numbered clauses:
 // e.g.: "12.3 Termination for Convenience", "12.3.1 Notice", "Section 4: Term", "Article II - Definitions", "Clause 8. Payment"
 const NUMBERED_CLAUSE_REGEX =
-  /^(?:(?:Section|Article|Clause)\s+)?([0-9]+(?:\.[0-9]+)*)(?:[\.\:\-\s]+)(.*)$/i;
+  /^(?:(?:Section|Article|Clause)\s+)?([0-9]+(?:\.[0-9]+)*)(?:[.:\-\s]+)(.*)$/i;
 
 // Regex for article/section headers without dots: e.g. "Section 4", "Article 2", "Schedule A"
 const SECTION_KEYWORD_REGEX =
-  /^(?:Section|Article|Clause|Schedule|Exhibit)\s+([A-Za-z0-9]+)(?:[\.\:\-\s]+)?(.*)$/i;
+  /^(?:Section|Article|Clause|Schedule|Exhibit)\s+([A-Za-z0-9]+)(?:[.:\-\s]+)?(.*)$/i;
 
 // Regex for ALL CAPS headings
-const ALL_CAPS_HEADING_REGEX = /^[A-Z0-9\s\,\-\–\—\:\/]{4,60}$/;
+const ALL_CAPS_HEADING_REGEX = /^[A-Z0-9\s,\-–—:/]{4,60}$/;
 
 /**
  * Parses full text or page-separated text into structured sections.
@@ -30,7 +30,7 @@ export function parseSections(
   input: string | ExtractedPdfPage[],
   documentType: "contract" | "policy" = "contract"
 ): ParsedSectionInput[] {
-  let fullDocText = "";
+  let fullDocText: string;
   // Map character offset ranges to page numbers
   const pageRanges: Array<{ pageNumber: number; charStart: number; charEnd: number }> = [];
 

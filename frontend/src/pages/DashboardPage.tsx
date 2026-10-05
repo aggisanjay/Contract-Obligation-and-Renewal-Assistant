@@ -19,13 +19,16 @@ interface DeadlineItem {
   contractTitle: string;
   itemType: string;
   title: string;
-  deadlineDate: string;
+  deadlineDate: string | null;
   responsibleParty?: string | null;
   urgency: "overdue" | "due_soon" | "upcoming";
   daysRemaining: number;
   reviewStatus: string;
   sourceSectionLabel: string;
   recurrence?: string | null;
+  dateSource?: string | null;
+  dateResolutionStatus?: string | null;
+  dateResolutionReason?: string | null;
 }
 
 interface DashboardResponse {
@@ -35,9 +38,13 @@ interface DashboardResponse {
     overdueCount: number;
     dueSoonCount: number;
     notYetReviewedCount: number;
+    needsDateCount?: number;
+    needsReconfirmationCount?: number;
   };
   firmDeadlines: DeadlineItem[];
   notYetReviewed: DeadlineItem[];
+  needsDate?: DeadlineItem[];
+  needsReconfirmation?: DeadlineItem[];
 }
 
 export const DashboardPage: React.FC = () => {
@@ -277,13 +284,15 @@ export const DashboardPage: React.FC = () => {
                 <div className="flex items-center space-x-4">
                   <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200/90 flex flex-col items-center justify-center shrink-0 shadow-2xs">
                     <span className="text-[10px] font-extrabold uppercase text-sky-700 tracking-wider">
-                      {new Date(item.deadlineDate + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })}
+                      {item.deadlineDate
+                        ? new Date(item.deadlineDate + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })
+                        : "--"}
                     </span>
                     <span className="text-base font-black text-slate-900 font-mono leading-none my-0.5">
-                      {item.deadlineDate.slice(8, 10)}
+                      {item.deadlineDate ? item.deadlineDate.slice(8, 10) : "--"}
                     </span>
                     <span className="text-[9px] font-mono text-slate-400 font-medium">
-                      {item.deadlineDate.slice(0, 4)}
+                      {item.deadlineDate ? item.deadlineDate.slice(0, 4) : ""}
                     </span>
                   </div>
 
@@ -291,6 +300,12 @@ export const DashboardPage: React.FC = () => {
                     <div className="flex items-center flex-wrap gap-2">
                       <h4 className="text-sm font-bold text-slate-900 font-heading">{item.title}</h4>
                       {getUrgencyBadge(item.urgency, item.daysRemaining)}
+                      {item.dateSource === "derived_from_quote" && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-300 shadow-2xs">
+                          <Sparkles className="w-3 h-3 mr-1 text-amber-600" />
+                          Derived from clause text. Please verify.
+                        </span>
+                      )}
                     </div>
 
                     <div className="mt-1.5 flex items-center flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
@@ -327,36 +342,83 @@ export const DashboardPage: React.FC = () => {
         )}
       </div>
 
-      {/* Section 2: Not Yet Reviewed (Warning & Review Queue) */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-2">
-            <AlertTriangle className="w-5 h-5 text-amber-500" />
-            <h2 className="text-base font-bold text-slate-800 font-heading">
-              Not Yet Reviewed ({data?.notYetReviewed.length || 0})
-            </h2>
+      {/* Section 2: Approved Obligations with Needs Input Date */}
+      {data?.needsDate && data.needsDate.length > 0 && (
+        <div className="mb-10">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-2">
+              <Calendar className="w-5 h-5 text-violet-600" />
+              <h2 className="text-base font-bold text-slate-900 font-heading">
+                Needs a Date ({data.needsDate.length})
+              </h2>
+            </div>
+            <span className="text-xs text-violet-700 font-medium bg-violet-50 px-2.5 py-1 rounded-full border border-violet-200/70">
+              Approved commitments anchored to events or lacking calendar dates — assign a manual override date
+            </span>
           </div>
-          <span className="text-xs text-amber-700 font-medium bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200/70">
-            Pending / Uncertain clauses — Do not treat as firm commitments until approved
-          </span>
-        </div>
 
-        {data?.notYetReviewed.length === 0 ? (
-          <div className="bg-slate-50/80 rounded-2xl border border-slate-200 p-6 text-center text-xs text-slate-400 font-medium">
-            All extracted items have been reviewed!
-          </div>
-        ) : (
-          <div className="bg-amber-50/30 rounded-2xl border border-amber-200/80 divide-y divide-amber-100/80 overflow-hidden shadow-2xs">
-            {data?.notYetReviewed.map((item) => (
+          <div className="bg-white rounded-2xl border border-violet-200/80 shadow-card divide-y divide-violet-100 overflow-hidden">
+            {data.needsDate.map((item) => (
               <div
                 key={item.id}
-                className="p-5 flex items-center justify-between hover:bg-amber-50/70 transition-colors gap-4"
+                className="p-5 hover:bg-violet-50/40 transition-colors flex items-center justify-between gap-4"
               >
                 <div>
                   <div className="flex items-center flex-wrap gap-2">
                     <h4 className="text-sm font-bold text-slate-900 font-heading">{item.title}</h4>
-                    <span className="px-2.5 py-1 text-xs rounded-lg bg-amber-100 text-amber-900 border border-amber-200 font-bold font-mono">
-                      Tentative Date: {item.deadlineDate}
+                    <span className="px-2.5 py-0.5 text-xs rounded-lg bg-violet-50 text-violet-700 border border-violet-200 font-bold">
+                      {item.dateResolutionReason || "Recurring, event-based: no fixed date"}
+                    </span>
+                    {item.recurrence && (
+                      <span className="px-2 py-0.5 bg-slate-100 rounded-md text-[10px] uppercase font-mono font-bold text-slate-600 border border-slate-200">
+                        {item.recurrence}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Contract: <strong className="text-slate-700 font-semibold">{item.contractTitle}</strong> ({item.sourceSectionLabel})
+                    {item.responsibleParty && ` — Party: ${item.responsibleParty}`}
+                  </p>
+                </div>
+
+                <Link
+                  to={`/contracts/${item.contractId}`}
+                  className="px-3.5 py-1.5 bg-violet-50 border border-violet-200 text-violet-800 text-xs font-bold rounded-xl hover:bg-violet-100 transition-all shadow-2xs active:scale-95 shrink-0"
+                >
+                  Set Override Date
+                </Link>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Section 3: Needs Re-confirmation (Stale items from modified clauses) */}
+      {data?.needsReconfirmation && data.needsReconfirmation.length > 0 && (
+        <div className="mb-10">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-2">
+              <AlertTriangle className="w-5 h-5 text-amber-600" />
+              <h2 className="text-base font-bold text-slate-900 font-heading">
+                Needs Re-confirmation ({data.needsReconfirmation.length})
+              </h2>
+            </div>
+            <span className="text-xs text-amber-800 font-medium bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200/80">
+              Source clause changed in newer contract version — withheld from firm commitments until re-confirmed
+            </span>
+          </div>
+
+          <div className="bg-amber-50/30 rounded-2xl border border-amber-200/80 divide-y divide-amber-100/80 overflow-hidden shadow-2xs">
+            {data.needsReconfirmation.map((item) => (
+              <div
+                key={item.id}
+                className="p-5 hover:bg-amber-50/70 transition-colors flex items-center justify-between gap-4"
+              >
+                <div>
+                  <div className="flex items-center flex-wrap gap-2">
+                    <h4 className="text-sm font-bold text-slate-900 font-heading">{item.title}</h4>
+                    <span className="px-2.5 py-0.5 text-xs rounded-lg bg-amber-100 text-amber-900 border border-amber-300 font-bold">
+                      Stale clause modified in new version
                     </span>
                   </div>
                   <p className="text-xs text-slate-500 mt-1">
@@ -367,7 +429,57 @@ export const DashboardPage: React.FC = () => {
 
                 <Link
                   to={`/contracts/${item.contractId}`}
-                  className="px-3.5 py-1.5 bg-white border border-amber-300 text-amber-900 text-xs font-bold rounded-xl hover:bg-amber-50 transition-all shadow-xs active:scale-95 shrink-0"
+                  className="px-3.5 py-1.5 bg-amber-600 text-white text-xs font-bold rounded-xl hover:bg-amber-500 transition-all shadow-xs active:scale-95 shrink-0"
+                >
+                  Re-confirm in Review
+                </Link>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Section 4: Not Yet Reviewed (Warning & Review Queue) */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-2">
+            <AlertTriangle className="w-5 h-5 text-slate-400" />
+            <h2 className="text-base font-bold text-slate-800 font-heading">
+              Not Yet Reviewed ({data?.notYetReviewed.length || 0})
+            </h2>
+          </div>
+          <span className="text-xs text-slate-500 font-medium bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200">
+            Pending / Uncertain clauses — Do not treat as firm commitments until approved
+          </span>
+        </div>
+
+        {data?.notYetReviewed.length === 0 ? (
+          <div className="bg-slate-50/80 rounded-2xl border border-slate-200 p-6 text-center text-xs text-slate-400 font-medium">
+            All extracted items have been reviewed!
+          </div>
+        ) : (
+          <div className="bg-slate-50/50 rounded-2xl border border-slate-200 divide-y divide-slate-100 overflow-hidden shadow-2xs">
+            {data?.notYetReviewed.map((item) => (
+              <div
+                key={item.id}
+                className="p-5 flex items-center justify-between hover:bg-slate-100/60 transition-colors gap-4"
+              >
+                <div>
+                  <div className="flex items-center flex-wrap gap-2">
+                    <h4 className="text-sm font-bold text-slate-900 font-heading">{item.title}</h4>
+                    <span className="px-2.5 py-1 text-xs rounded-lg bg-slate-100 text-slate-700 border border-slate-200 font-bold font-mono">
+                      Tentative Date: {item.deadlineDate || "None"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Contract: <strong className="text-slate-700 font-semibold">{item.contractTitle}</strong> ({item.sourceSectionLabel})
+                    {item.responsibleParty && ` — Party: ${item.responsibleParty}`}
+                  </p>
+                </div>
+
+                <Link
+                  to={`/contracts/${item.contractId}`}
+                  className="px-3.5 py-1.5 bg-white border border-slate-300 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-50 transition-all shadow-xs active:scale-95 shrink-0"
                 >
                   Review Item
                 </Link>

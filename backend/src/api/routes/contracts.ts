@@ -3,9 +3,6 @@ import { prisma } from "../../models/prisma.js";
 import { ingestDocument } from "../../services/ingestion/index.js";
 import { runExtractionPipeline } from "../../services/extractionPipeline.js";
 import {
-  computeExpiryDate,
-  computeNoticeDeadline,
-  resolveRelativeDeadline,
   applyManualOverride,
   resolveItemCalculatedDate,
 } from "../../services/dates.js";
@@ -15,6 +12,7 @@ import {
 } from "@contract-assistant/shared";
 import { NotFoundError, AppError } from "../../utils/errors.js";
 import { getLLMClient } from "../../llm/client.js";
+import { logger } from "../../utils/logger.js";
 import { z } from "zod";
 
 export async function contractRoutes(app: FastifyInstance) {
@@ -147,103 +145,68 @@ export async function contractRoutes(app: FastifyInstance) {
 
     // 5. Compute Dates deterministically for extracted items
     // First find effective date and expiry items to use as anchors
+    // 5. Deterministically resolve anchor dates for version 1
     const effItem = pipelineResult.items.find((i) => i.itemType === "effective_date");
-    const effPayload = effItem?.originalPayload as Record<string, unknown> | null | undefined;
-    const effDate = typeof effPayload?.date === "string" ? effPayload.date : null;
+    const effRes = effItem
+      ? resolveItemCalculatedDate(
+          { itemType: effItem.itemType, currentValue: JSON.stringify(effItem.originalPayload), exactQuote: effItem.exactQuote },
+          {}
+        )
+      : null;
+    const effDate = effRes?.calculatedDate || null;
 
     const termItem = pipelineResult.items.find((i) => i.itemType === "expiry");
-    const termPayload = (termItem?.originalPayload as Record<string, unknown> | null | undefined) || {};
-
-    let computedExpiry: string | null = null;
-    if (termItem) {
-      const expRes = computeExpiryDate({
-        effectiveDate: effDate || "",
-        termMonths: typeof termPayload.termLengthMonths === "number" ? termPayload.termLengthMonths : null,
-        termYears: typeof termPayload.termLengthYears === "number" ? termPayload.termLengthYears : null,
-        exactExpiryDate: typeof termPayload.expiryDate === "string" ? termPayload.expiryDate : null,
-      });
-      if (expRes.status === "resolved") {
-        computedExpiry = expRes.date;
-      }
-    }
+    const expRes = termItem
+      ? resolveItemCalculatedDate(
+          { itemType: termItem.itemType, currentValue: JSON.stringify(termItem.originalPayload), exactQuote: termItem.exactQuote },
+          { effectiveDate: effDate }
+        )
+      : null;
+    const computedExpiry = expRes?.calculatedDate || null;
 
     // Save Extracted Items
     const createdItems = await Promise.all(
       pipelineResult.items.map(async (item) => {
-        let calculatedDate: string | null = null;
-        let dateResolutionStatus: string = "not_applicable";
-        let dateResolutionReason: string | null = null;
-
-        if (item.itemType === "effective_date") {
-          calculatedDate = effDate;
-          dateResolutionStatus = effDate ? "resolved" : "needs_input";
-        } else if (item.itemType === "expiry") {
-          if (computedExpiry) {
-            calculatedDate = computedExpiry;
-            dateResolutionStatus = "resolved";
-          } else {
-            dateResolutionStatus = "needs_input";
-            dateResolutionReason = "Could not compute expiry date without effective date and term duration.";
-          }
-        } else if (item.itemType === "renewal" || item.itemType === "notice") {
-          const payload = (item.originalPayload as Record<string, unknown>) || {};
-          const noticeDays = typeof payload.noticePeriodDays === "number" ? payload.noticePeriodDays : null;
-          const noticeMonths = typeof payload.noticePeriodMonths === "number" ? payload.noticePeriodMonths : null;
-          if (computedExpiry && (noticeDays || noticeMonths)) {
-            const notRes = computeNoticeDeadline({
-              expiryDate: computedExpiry,
-              noticeDays,
-              noticeMonths,
-            });
-            if (notRes.status === "resolved") {
-              calculatedDate = notRes.date;
-              dateResolutionStatus = "resolved";
-            }
-          }
-        } else if (item.itemType === "obligation") {
-          const payload = (item.originalPayload as Record<string, unknown>) || {};
-          const deadlineDate = typeof payload.deadlineDate === "string" ? payload.deadlineDate : null;
-          const relativeDeadline = typeof payload.relativeDeadline === "string" ? payload.relativeDeadline : null;
-          if (deadlineDate) {
-            calculatedDate = deadlineDate;
-            dateResolutionStatus = "resolved";
-          } else if (relativeDeadline) {
-            const relRes = resolveRelativeDeadline(relativeDeadline, {
-              effectiveDate: effDate,
-              expiryDate: computedExpiry,
-            });
-            if (relRes.status === "resolved") {
-              calculatedDate = relRes.date;
-              dateResolutionStatus = "resolved";
-            } else if (relRes.status === "needs_input") {
-              dateResolutionStatus = "needs_input";
-              dateResolutionReason = relRes.reason;
-            }
-          }
-        }
-
-        return prisma.extractedItem.create({
-          data: {
-            contractVersionId: activeVersion.id,
+        const dateRes = resolveItemCalculatedDate(
+          {
             itemType: item.itemType,
-            status: item.status,
-            confidence: item.confidence,
-            uncertaintyReason: item.uncertaintyReason,
-            sourceSectionLabel: item.sourceSectionLabel,
-            sourceSectionId: item.sourceSectionId,
-            page: item.page,
-            exactQuote: item.exactQuote,
-            citationVerified: item.citationVerified,
-            citationWarning: item.citationWarning,
-            reviewStatus: "pending",
-            userEdited: false,
-            originalValue: JSON.stringify(item.originalPayload),
             currentValue: JSON.stringify(item.originalPayload),
-            calculatedDate,
-            dateResolutionStatus,
-            dateResolutionReason,
+            exactQuote: item.exactQuote,
           },
-        });
+          { effectiveDate: effDate, expiryDate: computedExpiry }
+        );
+
+        try {
+          return await prisma.extractedItem.create({
+            data: {
+              contractVersionId: activeVersion.id,
+              itemType: item.itemType,
+              status: item.status,
+              confidence: item.confidence,
+              uncertaintyReason: item.uncertaintyReason,
+              sourceSectionLabel: item.sourceSectionLabel,
+              sourceSectionId: item.sourceSectionId,
+              page: item.page,
+              exactQuote: item.exactQuote,
+              citationVerified: item.citationVerified,
+              citationWarning: item.citationWarning,
+              reviewStatus: "pending",
+              userEdited: false,
+              originalValue: JSON.stringify(item.originalPayload),
+              currentValue: JSON.stringify(item.originalPayload),
+              calculatedDate: dateRes.calculatedDate,
+              dateResolutionStatus: dateRes.status,
+              dateResolutionReason: dateRes.reason || null,
+              dateSource: dateRes.dateSource || null,
+            },
+          });
+        } catch (err) {
+          logger.error(
+            { err, itemType: item.itemType, contractVersionId: activeVersion.id },
+            "Failed to save extracted item in database"
+          );
+          throw err;
+        }
       })
     );
 
@@ -299,7 +262,7 @@ export async function contractRoutes(app: FastifyInstance) {
         ? contract.versions.find((v) => v.versionNumber === targetVersionNumber)
         : null) || contract.versions[0]!;
 
-    // Ensure all items in activeVersion have calculated dates resolved
+    // In-memory fallback if any activeVersion item has uncalculated date (no DB writes in GET)
     const effItem = activeVersion.extractedItems.find((i) => i.itemType === "effective_date");
     let effDate: string | null = effItem ? (effItem.manualDateOverride || effItem.calculatedDate) : null;
     if (effItem && !effDate) {
@@ -308,10 +271,7 @@ export async function contractRoutes(app: FastifyInstance) {
         effDate = effRes.calculatedDate;
         effItem.calculatedDate = effDate;
         effItem.dateResolutionStatus = "resolved";
-        await prisma.extractedItem.update({
-          where: { id: effItem.id },
-          data: { calculatedDate: effDate, dateResolutionStatus: "resolved" },
-        }).catch(() => {});
+        if (effRes.dateSource) effItem.dateSource = effRes.dateSource;
       }
     }
 
@@ -323,10 +283,7 @@ export async function contractRoutes(app: FastifyInstance) {
         expDate = expRes.calculatedDate;
         expItem.calculatedDate = expDate;
         expItem.dateResolutionStatus = "resolved";
-        await prisma.extractedItem.update({
-          where: { id: expItem.id },
-          data: { calculatedDate: expDate, dateResolutionStatus: "resolved" },
-        }).catch(() => {});
+        if (expRes.dateSource) expItem.dateSource = expRes.dateSource;
       }
     }
 
@@ -337,10 +294,7 @@ export async function contractRoutes(app: FastifyInstance) {
           item.calculatedDate = res.calculatedDate;
           item.dateResolutionStatus = res.status;
           item.dateResolutionReason = res.reason || null;
-          await prisma.extractedItem.update({
-            where: { id: item.id },
-            data: { calculatedDate: res.calculatedDate, dateResolutionStatus: res.status, dateResolutionReason: res.reason || null },
-          }).catch(() => {});
+          if (res.dateSource) item.dateSource = res.dateSource;
         }
       }
     }
@@ -398,6 +352,8 @@ export async function contractRoutes(app: FastifyInstance) {
     let dateResolutionReason = item.dateResolutionReason;
     let auditAction = "item_approved";
 
+    let dateSource = item.dateSource;
+
     if (body.action === "approve") {
       newReviewStatus = userEdited ? "edited_approved" : "approved";
       auditAction = "item_approved";
@@ -420,6 +376,7 @@ export async function contractRoutes(app: FastifyInstance) {
           calculatedDate = dateRes.calculatedDate;
           dateResolutionStatus = dateRes.status;
           dateResolutionReason = dateRes.reason || "Updated from edited clause";
+          dateSource = dateRes.dateSource || "ai_payload";
         }
       }
     } else if (body.action === "override_date") {
@@ -427,6 +384,7 @@ export async function contractRoutes(app: FastifyInstance) {
         manualDateOverride = null;
         dateResolutionReason = "Manual override removed; calculated date restored.";
         auditAction = "date_override_cleared";
+        dateSource = item.calculatedDate ? (item.dateSource || "ai_payload") : null;
       } else if (body.newValue) {
         const overrideRes = applyManualOverride(item.calculatedDate, body.newValue, body.note);
         if (overrideRes.status === "resolved") {
@@ -434,6 +392,7 @@ export async function contractRoutes(app: FastifyInstance) {
           dateResolutionStatus = "resolved";
           dateResolutionReason = "Manually overridden by reviewer";
           auditAction = "date_overridden";
+          dateSource = "manual_override";
         } else {
           throw new AppError(overrideRes.reason, 400, "INVALID_DATE_OVERRIDE");
         }
@@ -455,18 +414,25 @@ export async function contractRoutes(app: FastifyInstance) {
       }
     }
 
-    const updatedItem = await prisma.extractedItem.update({
-      where: { id: itemId },
-      data: {
-        reviewStatus: newReviewStatus,
-        currentValue: newCurrentValue,
-        userEdited,
-        calculatedDate,
-        manualDateOverride,
-        dateResolutionStatus,
-        dateResolutionReason,
-      },
-    });
+    let updatedItem;
+    try {
+      updatedItem = await prisma.extractedItem.update({
+        where: { id: itemId },
+        data: {
+          reviewStatus: newReviewStatus,
+          currentValue: newCurrentValue,
+          userEdited,
+          calculatedDate,
+          manualDateOverride,
+          dateResolutionStatus,
+          dateResolutionReason,
+          dateSource,
+        },
+      });
+    } catch (err) {
+      logger.error({ err, itemId }, "Failed to update extracted item in database");
+      throw err;
+    }
 
     // If effective_date or expiry/term changed or was overridden, cascade date updates
     if (item.itemType === "effective_date" || item.itemType === "expiry" || item.itemType === "term") {
@@ -485,10 +451,19 @@ export async function contractRoutes(app: FastifyInstance) {
         const expRes = resolveItemCalculatedDate(exp, { effectiveDate: activeEffDate });
         if (expRes.calculatedDate && expRes.calculatedDate !== exp.calculatedDate) {
           activeExpDate = expRes.calculatedDate;
-          await prisma.extractedItem.update({
-            where: { id: exp.id },
-            data: { calculatedDate: expRes.calculatedDate, dateResolutionStatus: expRes.status, dateResolutionReason: expRes.reason },
-          });
+          try {
+            await prisma.extractedItem.update({
+              where: { id: exp.id },
+              data: {
+                calculatedDate: expRes.calculatedDate,
+                dateResolutionStatus: expRes.status,
+                dateResolutionReason: expRes.reason,
+                dateSource: expRes.dateSource || exp.dateSource,
+              },
+            });
+          } catch (err) {
+            logger.error({ err, expId: exp.id }, "Cascade expiry date update failed");
+          }
         }
       }
 
@@ -500,10 +475,19 @@ export async function contractRoutes(app: FastifyInstance) {
         if (other.itemType === "renewal" || other.itemType === "notice" || other.itemType === "obligation") {
           const res = resolveItemCalculatedDate(other, { effectiveDate: activeEffDate, expiryDate: activeExpDate });
           if (res.calculatedDate && res.calculatedDate !== other.calculatedDate) {
-            await prisma.extractedItem.update({
-              where: { id: other.id },
-              data: { calculatedDate: res.calculatedDate, dateResolutionStatus: res.status, dateResolutionReason: res.reason },
-            });
+            try {
+              await prisma.extractedItem.update({
+                where: { id: other.id },
+                data: {
+                  calculatedDate: res.calculatedDate,
+                  dateResolutionStatus: res.status,
+                  dateResolutionReason: res.reason,
+                  dateSource: res.dateSource || other.dateSource,
+                },
+              });
+            } catch (err) {
+              logger.error({ err, otherId: other.id }, "Cascade dependent date update failed");
+            }
           }
         }
       }

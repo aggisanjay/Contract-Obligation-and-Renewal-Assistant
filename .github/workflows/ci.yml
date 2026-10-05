@@ -52,11 +52,8 @@ jobs:
         env:
           DATABASE_URL: "postgresql://testuser:testpassword@localhost:5432/testdb?sslmode=disable"
 
-      - name: Run Linting
-        run: |
-          npm --workspace=shared run lint
-          npm --workspace=backend run lint
-          npm --workspace=frontend run lint
+      - name: Run Linting (ESLint & TypeScript-ESLint)
+        run: npm run lint
 
       - name: Typecheck Shared, Backend & Frontend
         run: |

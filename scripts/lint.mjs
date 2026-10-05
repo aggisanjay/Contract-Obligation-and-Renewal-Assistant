@@ -1,10 +1,7 @@
 import { execSync } from "node:child_process";
 
-const workspaces = ["shared", "backend", "frontend"];
-for (const w of workspaces) {
-  console.log(`[Lint] Workspace: ${w}`);
-  execSync(`node node_modules/typescript/bin/tsc --project ${w}/tsconfig.json --noEmit`, {
-    stdio: "inherit",
-  });
-}
-console.log("[Lint] All workspaces passed cleanly with 0 errors!");
+console.log("[Lint] Running ESLint across repository...");
+execSync("node node_modules/eslint/bin/eslint.js .", {
+  stdio: "inherit",
+});
+console.log("[Lint] ESLint passed cleanly with 0 errors!");

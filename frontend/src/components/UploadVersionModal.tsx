@@ -61,8 +61,8 @@ export const UploadVersionModal: React.FC<UploadVersionModalProps> = ({
         staleCount: res.staleCount,
         carriedOverCount: res.carriedOverCount,
       });
-    } catch (err: any) {
-      setError(err?.message || "Failed to upload new version");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to upload new version");
     } finally {
       setIsSubmitting(false);
     }

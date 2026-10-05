@@ -31,7 +31,7 @@ describe("Full Contract Lifecycle Integration Test", () => {
         await prisma.contractVersion.deleteMany({ where: { contractId } });
         await prisma.contractSummary.deleteMany({ where: { contractId } });
         await prisma.contract.delete({ where: { id: contractId } });
-      } catch (err) {
+      } catch {
         // Ignore deletion errors in teardown
       }
     }
@@ -91,7 +91,7 @@ Provider shall maintain a monthly uptime percentage of at least 99.9%.
     const auditRes = await request(app.server).get(`/api/contracts/${contractId}/audit-log`);
     expect(auditRes.status).toBe(200);
     const log = auditRes.body.logs.find(
-      (l: any) => l.action === "item_approved" && l.itemId === v1ItemIdToApprove
+      (l: { action: string; itemId: string }) => l.action === "item_approved" && l.itemId === v1ItemIdToApprove
     );
     expect(log).toBeDefined();
   });
@@ -115,7 +115,7 @@ Provider shall maintain a monthly uptime percentage of at least 99.9%.
     // Verify audit log contains date override rationale
     const auditRes = await request(app.server).get(`/api/contracts/${contractId}/audit-log`);
     const dateLog = auditRes.body.logs.find(
-      (l: any) => l.action === "date_overridden" && l.itemId === v1ItemIdToOverride
+      (l: { action: string; itemId: string; note?: string }) => l.action === "date_overridden" && l.itemId === v1ItemIdToOverride
     );
     expect(dateLog).toBeDefined();
     expect(dateLog?.note).toBe(auditReason);
@@ -152,7 +152,7 @@ Provider shall maintain a monthly uptime percentage of at least 99.9%.
     expect(contractRes.body.activeVersion.versionNumber).toBe(2);
 
     const v2Items = contractRes.body.activeVersion.extractedItems;
-    const staleItems = v2Items.filter((i: any) => i.reviewStatus === "stale");
+    const staleItems = v2Items.filter((i: { reviewStatus: string; id: string; staleReason?: string | null }) => i.reviewStatus === "stale");
 
     // Section 2 was modified, so items citing Section 2 from v1 become stale
     if (staleItems.length > 0) {
@@ -188,7 +188,7 @@ Provider shall maintain a monthly uptime percentage of at least 99.9%.
     // Audit log verification
     const auditRes = await request(app.server).get(`/api/contracts/${contractId}/audit-log`);
     const staleLog = auditRes.body.logs.find(
-      (l: any) => l.action === "stale_reconfirmed" && l.itemId === targetItemId
+      (l: { action: string; itemId: string }) => l.action === "stale_reconfirmed" && l.itemId === targetItemId
     );
     expect(staleLog).toBeDefined();
   });

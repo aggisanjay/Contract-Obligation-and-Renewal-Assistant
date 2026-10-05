@@ -39,7 +39,7 @@ export interface CompiledSummaryData {
     citation: string;
   };
   renewalTerms: {
-    isAutoRenew: boolean;
+    isAutoRenew: boolean | null;
     summary: string;
     citation: string;
   };
@@ -136,16 +136,42 @@ export function compileReviewedSummary(
     .filter(Boolean)
     .join(" | ");
 
+  const pendingEffective = items.some(
+    (i) => i.itemType === "effective_date" && i.reviewStatus === "pending"
+  );
+  const pendingExpiry = items.some(
+    (i) => i.itemType === "expiry" && i.reviewStatus === "pending"
+  );
+  const pendingNotice = items.some(
+    (i) => (i.itemType === "renewal" || i.itemType === "notice") && i.reviewStatus === "pending"
+  );
+
+  const effectiveDateDisplay = effectiveDate || (pendingEffective ? "Pending review" : "Not confirmed");
+  const expiryDateDisplay = expiryDate || (pendingExpiry ? "Pending review" : "Not confirmed");
+  const noticeDeadlineDisplay = noticeDeadline || (pendingNotice ? "Pending review" : "Not confirmed");
+
   // 3. Renewal Terms
   const renewalItem = approvedItems.find((i) => i.itemType === "renewal");
   const renewalVal = renewalItem ? parseVal(renewalItem) : null;
+  let renewalIsAutoRenew: boolean | null = null;
+  let renewalSummary: string;
+
+  if (renewalVal && typeof renewalVal.isAutoRenew === "boolean") {
+    renewalIsAutoRenew = renewalVal.isAutoRenew;
+    if (str(renewalVal.conditions)) {
+      renewalSummary = str(renewalVal.conditions);
+    } else if (renewalVal.isAutoRenew) {
+      renewalSummary = `Automatically renews${renewalVal.renewalTermMonths ? ` for ${renewalVal.renewalTermMonths} months` : ""}. Notice required: ${renewalVal.noticePeriodDays || renewalVal.noticePeriodMonths || 30} days.`;
+    } else {
+      renewalSummary = "Does not auto-renew.";
+    }
+  } else {
+    renewalSummary = "Renewal terms not specified in approved data. See cited clause.";
+  }
+
   const renewalTerms = {
-    isAutoRenew: !!renewalVal?.isAutoRenew,
-    summary:
-      (renewalVal && str(renewalVal.conditions)) ||
-      (renewalVal?.isAutoRenew
-        ? `Automatically renews${renewalVal.renewalTermMonths ? ` for ${renewalVal.renewalTermMonths} months` : ""}. Notice required: ${renewalVal.noticePeriodDays || renewalVal.noticePeriodMonths || 30} days.`
-        : "Does not auto-renew."),
+    isAutoRenew: renewalIsAutoRenew,
+    summary: renewalSummary,
     citation: renewalItem
       ? `[${renewalItem.sourceSectionLabel}${renewalItem.page ? `, p.${renewalItem.page}` : ""}] "${renewalItem.exactQuote}"`
       : "Not specified in approved items",
@@ -155,9 +181,12 @@ export function compileReviewedSummary(
   const termItem = approvedItems.find((i) => i.itemType === "termination");
   const termVal = termItem ? parseVal(termItem) : null;
   const terminationTerms = {
-    summary:
-      (termVal && str(termVal.summary)) ||
-      (termVal?.forCauseAllowed ? "Termination for cause permitted." : "No explicit termination summary approved."),
+    summary: termItem
+      ? (termVal && str(termVal.summary)) ||
+        (termVal?.forCauseAllowed
+          ? "Termination for cause permitted."
+          : "Termination terms approved without specific summary.")
+      : "Termination clause not yet approved",
     citation: termItem
       ? `[${termItem.sourceSectionLabel}${termItem.page ? `, p.${termItem.page}` : ""}] "${termItem.exactQuote}"`
       : "Not specified in approved items",
@@ -215,9 +244,9 @@ ${
 }
 
 ## 2. Key Dates
-- **Effective Date:** ${effectiveDate || "Not confirmed"}
-- **Contract Expiry Date:** ${expiryDate || "Not confirmed"}
-- **Notice Deadline:** ${noticeDeadline || "Not confirmed"}
+- **Effective Date:** ${effectiveDateDisplay}
+- **Contract Expiry Date:** ${expiryDateDisplay}
+- **Notice Deadline:** ${noticeDeadlineDisplay}
 - **Citations:** ${keyDateCitations || "None"}
 
 ## 3. Term, Renewal & Termination
@@ -332,9 +361,9 @@ ${
 
   <h2>2. Key Dates</h2>
   <ul>
-    <li><strong>Effective Date:</strong> ${effectiveDate || "Not confirmed"}</li>
-    <li><strong>Contract Expiry Date:</strong> ${expiryDate || "Not confirmed"}</li>
-    <li><strong>Notice Deadline:</strong> ${noticeDeadline || "Not confirmed"}</li>
+    <li><strong>Effective Date:</strong> ${effectiveDateDisplay}</li>
+    <li><strong>Contract Expiry Date:</strong> ${expiryDateDisplay}</li>
+    <li><strong>Notice Deadline:</strong> ${noticeDeadlineDisplay}</li>
   </ul>
   <p class="citation">Citations: ${keyDateCitations || "None"}</p>
 

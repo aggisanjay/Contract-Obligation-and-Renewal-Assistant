@@ -45,9 +45,12 @@ import {
   RefreshCw,
 } from "lucide-react";
 
+import { useToast } from "../context/ToastContext.js";
+
 export const ReviewPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const toast = useToast();
 
   const [data, setData] = useState<ContractDetailsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -98,8 +101,8 @@ export const ReviewPage: React.FC = () => {
       setData(res);
       setSelectedVersion(res.activeVersion.versionNumber);
       setError(null);
-    } catch (err: any) {
-      if (!silent) setError(err.message || "Failed to load contract");
+    } catch (err: unknown) {
+      if (!silent) setError(err instanceof Error ? err.message : "Failed to load contract");
     } finally {
       if (!silent) setLoading(false);
     }
@@ -138,9 +141,10 @@ export const ReviewPage: React.FC = () => {
     });
     try {
       await reviewItem(id, item.id, "approve");
+      toast.success("Item approved");
       await loadData(selectedVersion || undefined, true);
-    } catch (err: any) {
-      alert(err.message || "Failed to approve item");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to approve item");
       await loadData(selectedVersion || undefined, true);
     }
   };
@@ -162,9 +166,10 @@ export const ReviewPage: React.FC = () => {
     });
     try {
       await reviewItem(id, item.id, "reject");
+      toast.info("Item rejected");
       await loadData(selectedVersion || undefined, true);
-    } catch (err: any) {
-      alert(err.message || "Failed to reject item");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to reject item");
       await loadData(selectedVersion || undefined, true);
     }
   };
@@ -180,9 +185,10 @@ export const ReviewPage: React.FC = () => {
         delete next[itemId];
         return next;
       });
+      toast.success(`Stale item ${action === "reconfirm" ? "reconfirmed" : "dismissed"}`);
       await loadData(selectedVersion || undefined, true);
-    } catch (err: any) {
-      alert(err?.message || "Failed to resolve stale item");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to resolve stale item");
     } finally {
       setResolvingStaleId(null);
     }
@@ -203,9 +209,10 @@ export const ReviewPage: React.FC = () => {
     try {
       setIsRetryingStep(true);
       await retryExtractionStep(id, stepName);
+      toast.success(`Pipeline step '${stepName}' retried`);
       await loadData(selectedVersion || undefined, true);
-    } catch (err: any) {
-      alert(err?.message || `Failed to retry step ${stepName}`);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : `Failed to retry step ${stepName}`);
     } finally {
       setIsRetryingStep(false);
     }
@@ -242,9 +249,10 @@ export const ReviewPage: React.FC = () => {
     });
     try {
       await reviewItem(id, item.id, "edit", edited, editNote);
+      toast.success("Item changes saved");
       await loadData(selectedVersion || undefined, true);
-    } catch (err: any) {
-      alert(err.message || "Failed to save edit");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to save edit");
       await loadData(selectedVersion || undefined, true);
     }
   };
@@ -256,9 +264,10 @@ export const ReviewPage: React.FC = () => {
     setQuestionAnswer("");
     try {
       await reviewItem(id, item.id, "answer_question", ans);
+      toast.success("Question answer saved");
       await loadData(selectedVersion || undefined, true);
-    } catch (err: any) {
-      alert(err.message || "Failed to save question answer");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to save question answer");
       await loadData(selectedVersion || undefined, true);
     }
   };
@@ -289,9 +298,10 @@ export const ReviewPage: React.FC = () => {
     setNewDateVal("");
     try {
       await reviewItem(id, item.id, "override_date", finalDate);
+      toast.success(finalDate === "reset" ? "Date reset to calculated" : "Manual date override saved");
       await loadData(selectedVersion || undefined, true);
-    } catch (err: any) {
-      alert(err.message || "Failed to save date override");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to save date override");
       await loadData(selectedVersion || undefined, true);
     }
   };
@@ -325,9 +335,10 @@ export const ReviewPage: React.FC = () => {
         id,
         eligibleItems.map((i) => i.id)
       );
+      toast.success(`Bulk approved ${eligibleItems.length} items`);
       await loadData(selectedVersion || undefined, true);
-    } catch (err: any) {
-      alert(err.message || "Bulk approval failed");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Bulk approval failed");
       await loadData(selectedVersion || undefined, true);
     }
   };
@@ -346,8 +357,8 @@ export const ReviewPage: React.FC = () => {
     try {
       await deleteContract(id);
       navigate("/");
-    } catch (err: any) {
-      setDeleteError(err?.message || "Failed to delete contract");
+    } catch (err: unknown) {
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete contract");
       setIsDeleting(false);
     }
   };
@@ -916,6 +927,12 @@ export const ReviewPage: React.FC = () => {
                               {item.manualDateOverride && item.calculatedDate && (
                                 <span className="text-slate-500">
                                   (Calculated from clause: <strong className="font-mono font-semibold text-slate-700">{item.calculatedDate}</strong>)
+                                </span>
+                              )}
+                              {item.dateSource === "derived_from_quote" && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-300">
+                                  <Sparkles className="w-3 h-3 mr-1 text-amber-600" />
+                                  Derived from clause text. Please verify.
                                 </span>
                               )}
                               {item.dateResolutionReason && (

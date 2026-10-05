@@ -1,0 +1,47 @@
+ENTERPRISE SOFTWARE AND SERVICES AGREEMENT
+
+This Enterprise Software and Services Agreement ("Agreement") is made and entered into as of October 26, 2026 ("Effective Date"), by and between:
+
+Nexient Systems Inc., a Delaware corporation with its principal office at 750 Tech Boulevard, Suite 300, Austin, TX 78701 ("Provider" or "Vendor"),
+and
+Vanguard Logistics Corp., an Ohio corporation with its principal office at 1200 Enterprise Parkway, Cleveland, OH 44114 ("Customer" or "Client").
+
+Provider and Customer may collectively be referred to as the "Parties" or individually as a "Party."
+
+SECTION 1. SERVICES AND LICENSING
+1.1 Cloud Services. Provider agrees to provide Customer with hosted access to its enterprise logistics intelligence platform (the "Services") pursuant to the terms and conditions set forth herein.
+1.2 Integration Plan. Customer shall deliver the initial system integration plan and architecture specifications to Provider within thirty (30) days after the Effective Date.
+
+SECTION 2. TERM AND INITIAL PERIOD
+2.1 Term. This Agreement shall commence on the Effective Date (October 26, 2026) and continue in full force and effect for an initial term of six (6) months, expiring on April 26, 2027 ("Initial Term"), unless earlier terminated pursuant to this Agreement.
+
+SECTION 3. AUTOMATIC RENEWAL AND NON-RENEWAL NOTICE
+3.1 Automatic Renewal. Upon the expiration of the Initial Term or any renewal period, this Agreement shall automatically renew for successive six (6) month periods, unless either Party provides written notice of non-renewal to the other Party at least forty-five (45) days prior to the expiration of the then-current term.
+3.2 Notice Mechanism. All notices of non-renewal must be transmitted via electronic mail with delivery confirmation to contracts@nexientsystems.com and legal@vanguardlogistics.com.
+
+SECTION 4. FEES AND PAYMENTS
+4.1 Monthly Subscription. Customer agrees to remit recurring monthly service fees within thirty (30) days following receipt of each monthly invoice.
+
+SECTION 5. REPORTING AND SLA PERFORMANCE
+5.1 Quarterly Reports. Provider shall provide quarterly service performance and SLA compliance reports within fifteen (15) days after each calendar quarter end.
+5.2 Service Availability. Provider covenants that the hosted platform shall maintain a monthly availability level of 99.95%.
+
+SECTION 6. TERMINATION
+6.1 Termination for Cause. Either Party may terminate this Agreement upon written notice if the other Party materially breaches any term and fails to cure such breach within thirty (30) days after receiving written notice thereof.
+
+SECTION 7. GOVERNING LAW
+7.1 Jurisdiction. This Agreement shall be governed by and construed under the laws of the State of Delaware, without giving effect to conflicts of law rules.
+
+IN WITNESS WHEREOF, the Parties have caused this Enterprise Software and Services Agreement to be executed by their duly authorized representatives as of the Effective Date.
+
+Nexient Systems Inc.
+By: /s/ Sarah Jenkins
+Name: Sarah Jenkins
+Title: Chief Technology Officer
+Date: October 26, 2026
+
+Vanguard Logistics Corp.
+By: /s/ Raymond Chen
+Name: Raymond Chen
+Title: Director of Global Supply Chain
+Date: October 26, 2026

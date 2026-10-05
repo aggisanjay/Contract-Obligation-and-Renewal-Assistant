@@ -19,9 +19,11 @@ import {
   Copy,
   Check,
 } from "lucide-react";
+import { useToast } from "../context/ToastContext.js";
 
 export const SummaryPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const toast = useToast();
 
   const [compiled, setCompiled] = useState<CompiledSummaryData | null>(null);
   const [isOutdated, setIsOutdated] = useState(false);
@@ -57,9 +59,10 @@ export const SummaryPage: React.FC = () => {
       const res = await generateContractSummary(id);
       setCompiled(res.compiled);
       setIsOutdated(false);
+      toast.success("Summary regenerated successfully.");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      alert("Failed to regenerate summary: " + msg);
+      toast.error("Failed to regenerate summary: " + msg);
     } finally {
       setRegenerating(false);
     }

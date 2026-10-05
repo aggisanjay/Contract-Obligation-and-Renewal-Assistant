@@ -6,6 +6,7 @@ import { detectStaleItems, compareVersionSections } from "../../services/staleDe
 import { StaleResolveActionSchema } from "@contract-assistant/shared";
 import { NotFoundError, AppError } from "../../utils/errors.js";
 import { resolveItemCalculatedDate } from "../../services/dates.js";
+import { logger } from "../../utils/logger.js";
 
 export async function versionRoutes(app: FastifyInstance) {
   /**
@@ -229,31 +230,46 @@ export async function versionRoutes(app: FastifyInstance) {
             manualDateOverride: isCarriedOver ? priorFull?.manualDateOverride || null : null,
             dateResolutionStatus: dateRes.status,
             dateResolutionReason: dateRes.reason || null,
+            dateSource: dateRes.dateSource || (isCarriedOver ? priorFull?.dateSource || null : null),
           },
+        }).catch((err) => {
+          logger.error({ err, itemType: draft.itemType, versionId: newVersion.id }, "Failed to create extracted item in new version");
+          throw err;
         });
       })
     );
 
     // Carry forward stale items into new version review queue
     for (const stale of stalePriorItems) {
-      await prisma.extractedItem.create({
-        data: {
-          contractVersionId: newVersion.id,
-          itemType: stale.priorItem.itemType,
-          status: "uncertain",
-          confidence: 0.5,
-          uncertaintyReason: stale.staleReason,
-          sourceSectionLabel: stale.priorItem.sourceSectionLabel,
-          exactQuote: stale.priorItem.exactQuote,
-          citationVerified: false,
-          citationWarning: `Flagged potentially stale: ${stale.staleReason}`,
-          reviewStatus: "stale",
-          userEdited: stale.priorItem.userEdited,
-          originalValue: stale.priorItem.currentValue,
-          currentValue: stale.priorItem.currentValue,
-          staleReason: stale.staleReason,
-        },
-      });
+      const priorFull = priorApprovedItems.find((p) => p.id === stale.priorItem.id);
+      try {
+        await prisma.extractedItem.create({
+          data: {
+            contractVersionId: newVersion.id,
+            itemType: stale.priorItem.itemType,
+            status: "uncertain",
+            confidence: 0.5,
+            uncertaintyReason: stale.staleReason,
+            sourceSectionLabel: stale.priorItem.sourceSectionLabel,
+            exactQuote: stale.priorItem.exactQuote,
+            citationVerified: false,
+            citationWarning: `Flagged potentially stale: ${stale.staleReason}`,
+            reviewStatus: "stale",
+            userEdited: stale.priorItem.userEdited,
+            originalValue: stale.priorItem.currentValue,
+            currentValue: stale.priorItem.currentValue,
+            staleReason: stale.staleReason,
+            calculatedDate: priorFull?.calculatedDate || null,
+            manualDateOverride: priorFull?.manualDateOverride || null,
+            dateResolutionStatus: priorFull?.dateResolutionStatus || "not_applicable",
+            dateResolutionReason: priorFull?.dateResolutionReason || null,
+            dateSource: priorFull?.dateSource || null,
+          },
+        });
+      } catch (err) {
+        logger.error({ err, priorItemId: stale.priorItem.id }, "Failed to carry forward stale item");
+        throw err;
+      }
     }
 
     // Audit log
