@@ -4,7 +4,7 @@ An enterprise-grade information-management platform that ingests commercial cont
 
 The entire application can be deployed as **one single service** (Fastify serving the prebuilt React SPA with same-origin `/api` routing) or as independent frontend and backend services.
 
-🌐 **Live Application URL:** `https://contract-obligation-assistant.onrender.com` *(Live Demo Placeholder)*
+🌐 **Live Application URL: https://contract-obligation-assistant.onrender.com
 
 ---
 
